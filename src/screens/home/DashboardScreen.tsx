@@ -288,6 +288,91 @@ function KpiCard({
   );
 }
 
+function HeroCard({
+  saldo,
+  dataRef,
+  walletName,
+  onRefresh,
+  refreshing,
+}: {
+  saldo: number;
+  dataRef: string;
+  walletName: string;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const isPos = saldo >= 0;
+  const formatted = formatMoney(saldo);
+  const dataLabel = dataRef ? `Saldo em ${ddmm(dataRef)}` : 'Saldo atual';
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#111a11',
+        borderColor: '#1e3a1e',
+        borderWidth: 1,
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 4,
+      }}
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: '#4a7a4a',
+              fontWeight: '600',
+              fontSize: 11,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+            }}
+          >
+            {walletName}
+          </Text>
+          <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }}>
+            {dataLabel}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onRefresh}
+          disabled={refreshing}
+          style={({ pressed }) => [
+            {
+              borderWidth: 1,
+              borderColor: '#1e3a1e',
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              opacity: refreshing || pressed ? 0.6 : 1,
+            },
+          ]}
+        >
+          <Text style={{ color: '#4a7a4a', fontSize: 12, fontWeight: '600' }}>
+            {refreshing ? '...' : 'Atualizar'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <Text
+        style={{
+          color: isPos ? '#4ade80' : '#f87171',
+          fontSize: 36,
+          fontWeight: '600',
+          marginTop: 16,
+          fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+          letterSpacing: -0.5,
+        }}
+      >
+        {formatted}
+      </Text>
+    </View>
+  );
+}
+
 function SimpleBarChart({
   title,
   subtitle,
@@ -497,6 +582,7 @@ export default function DashboardScreen() {
   const [grupoAtivo, setGrupoAtivo] = useState<GrupoAtivo | null>(null);
   const [contas, setContas] = useState<Conta[]>([]);
   const [saldoPorConta, setSaldoPorConta] = useState<Record<string, number>>({});
+  const [dataUltimaTransacao, setDataUltimaTransacao] = useState<string>('');
 
   const [rangeMode, setRangeMode] = useState<RangeMode>('30d');
   const [customIni, setCustomIni] = useState('');
@@ -571,6 +657,7 @@ export default function DashboardScreen() {
       if (error) throw new Error(`Não foi possível calcular saldos. (${error.message})`);
 
       const m: Record<string, number> = {};
+      let maxData = '';
       (data || []).forEach((r: any) => {
         const cid = r?.conta_id;
         if (!cid) return;
@@ -585,9 +672,13 @@ export default function DashboardScreen() {
         else signed = 0;
 
         m[cid] = (m[cid] || 0) + signed;
+
+        const dc = (r?.data_caixa || '').slice(0, 10);
+        if (dc && dc > maxData) maxData = dc;
       });
 
       setSaldoPorConta(m);
+      setDataUltimaTransacao(maxData);
     },
     [hojeYmd]
   );
@@ -961,7 +1052,7 @@ export default function DashboardScreen() {
   const periodoLabel =
     rangeMode === 'custom'
       ? range.ini && range.fim
-        ? `${range.ini} → ${range.fim}`
+        ? `${range.ini} -> ${range.fim}`
         : 'Personalizado'
       : range.label;
 
@@ -971,25 +1062,64 @@ export default function DashboardScreen() {
       contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4ade80" />}
     >
-      <Header
-        title="Dashboard"
-        subtitle={grupoAtivo?.nome_grupo || 'Minha Carteira'}
-        info={`Período: ${periodoLabel} • (transferências ignoradas nos KPIs e gráficos)`}
-        right={<Button title="Atualizar" onPress={carregarTela} disabled={refreshing} />}
+      {/* ── Hero: saldo total + data de referência ── */}
+      <HeroCard
+        saldo={saldoTotalContas}
+        dataRef={dataUltimaTransacao}
+        walletName={grupoAtivo?.nome_grupo || 'Minha Carteira'}
+        onRefresh={carregarTela}
+        refreshing={refreshing}
       />
 
-      <View style={{ height: 10 }} />
+      <View style={{ height: 12 }} />
+
+      {/* ── Saldos por conta ── */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Text style={styles.sectionTitle}>Contas</Text>
+        <Pressable
+          onPress={() => navigation.navigate('Lancamentos')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={{ color: '#4a7a4a', fontSize: 12, fontWeight: '600' }}>Ver lancamentos</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.accountsGrid}>
+        {saldosOrdenados.map((c: any) => {
+          const tipo = String(c.tipo || '').toLowerCase();
+          const badge = tipo === 'cartao' ? 'CARTAO' : tipo === 'banco' ? 'BANCO' : (c.tipo || 'CONTA').toUpperCase();
+          const saldo = Number(c.saldo || 0);
+
+          return (
+            <Card key={c.id} style={styles.accountCard} noShadow>
+              <Text style={styles.accountType}>{badge}</Text>
+              <Text style={styles.accountName} numberOfLines={1}>{c.nome}</Text>
+              <Text style={[styles.accountSaldo, saldo >= 0 ? styles.pos : styles.neg]}>{formatMoney(saldo)}</Text>
+            </Card>
+          );
+        })}
+      </View>
+
+      <View style={{ height: 16 }} />
+
+      {/* ── Divider ── */}
+      <View style={{ height: 1, backgroundColor: '#21262d', marginBottom: 16 }} />
 
       {erroTela ? (
-        <Card>
-          <Text style={{ color: '#f87171', fontWeight: '600' }}>{erroTela}</Text>
-        </Card>
+        <>
+          <Card>
+            <Text style={{ color: '#f87171', fontWeight: '600' }}>{erroTela}</Text>
+          </Card>
+          <View style={{ height: 10 }} />
+        </>
       ) : null}
 
+      {/* ── Período ── */}
       <Card>
-        <Text style={styles.sectionTitle}>Período</Text>
+        <Text style={styles.sectionTitle}>Periodo</Text>
+        <View style={{ height: 8 }} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <Chip label="Mês" active={rangeMode === 'mes'} onPress={() => setRangeMode('mes')} />
+          <Chip label="Mes" active={rangeMode === 'mes'} onPress={() => setRangeMode('mes')} />
           <Chip label="30d" active={rangeMode === '30d'} onPress={() => setRangeMode('30d')} />
           <Chip label="90d" active={rangeMode === '90d'} onPress={() => setRangeMode('90d')} />
           <Chip label="Ano" active={rangeMode === 'ano'} onPress={() => setRangeMode('ano')} />
@@ -1032,48 +1162,41 @@ export default function DashboardScreen() {
 
       <View style={{ height: 10 }} />
 
+      {/* ── KPIs do período ── */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 } as any}>
-        <KpiCard label="Gastos (período)" value={formatMoney(agregados.despesas)} variant="neg" />
-        <KpiCard label="Receitas (período)" value={formatMoney(agregados.receitas)} variant="pos" />
+        <KpiCard label="Receitas" value={formatMoney(agregados.receitas)} variant="pos" hint={periodoLabel} />
+        <KpiCard label="Gastos" value={formatMoney(agregados.despesas)} variant="neg" hint={periodoLabel} />
         <KpiCard
-          label="Resultado (Receitas - Gastos)"
+          label="Resultado"
           value={formatMoney(agregados.resultado)}
           variant={agregados.resultado >= 0 ? 'pos' : 'neg'}
         />
-        <KpiCard label="Média/dia (gastos)" value={formatMoney(agregados.mediaDia)} variant="neutral" />
+        <KpiCard label="Media/dia (gastos)" value={formatMoney(agregados.mediaDia)} variant="neutral" hint={agregados.dias + ' dias'} />
       </View>
 
       <View style={{ height: 10 }} />
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 } as any}>
         <KpiCard
-          label="Maior categoria (período)"
-          value={`${maiorCategoria.nome} • ${formatMoney(maiorCategoria.v)}`}
+          label="Maior categoria"
+          value={maiorCategoria.nome + ' ' + formatMoney(maiorCategoria.v)}
           variant="neutral"
-          hint={`${maiorCategoria.pct}% dos gastos`}
+          hint={maiorCategoria.pct + '% dos gastos'}
         />
         <KpiCard
-          label="Maior despesa (período)"
+          label="Maior despesa"
           value={formatMoney(agregados.maiorDesp.v)}
           variant="neutral"
-          hint={`${agregados.maiorDesp.dt} • ${agregados.maiorDesp.g} • ${agregados.maiorDesp.s}`}
+          hint={agregados.maiorDesp.dt + ' - ' + agregados.maiorDesp.g}
         />
       </View>
 
       <View style={{ height: 10 }} />
 
-      <SimpleBarChart
-        title="Gastos ao longo do período"
-        subtitle={serieGastos.subtitle}
-        points={serieGastos.points}
-        valueFormatter={formatMoney}
-      />
-
-      <View style={{ height: 10 }} />
-
+      {/* ── Gastos por categoria ── */}
       <CategoryBars
-        title="Gastos por categoria (Grupo)"
-        subtitle="Clique no grupo para abrir os lançamentos filtrados • Detalhar mostra subcategorias"
+        title="Gastos por categoria"
+        subtitle="Toque no grupo para abrir lancamentos filtrados"
         items={despesasPorGrupo}
         total={totalDespesas}
         selectedGrupo={grupoDetalhe}
@@ -1090,10 +1213,10 @@ export default function DashboardScreen() {
           <View style={{ height: 10 }} />
           <Card>
             <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 14 }}>
-              Subcategorias • {grupoDetalhe}
+              {grupoDetalhe}
             </Text>
             <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }}>
-              Clique na subcategoria para abrir os lançamentos filtrados
+              Toque na subcategoria para abrir os lancamentos filtrados
             </Text>
 
             <View style={{ height: 10 }} />
@@ -1126,7 +1249,7 @@ export default function DashboardScreen() {
                       <Text style={{ color: '#f87171', fontWeight: '600', fontSize: 13 }}>{formatMoney(it.value)}</Text>
                     </View>
                     <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }}>
-                      {pct}% dos gastos do período
+                      {pct}% dos gastos do periodo
                     </Text>
                   </Pressable>
                 );
@@ -1134,58 +1257,32 @@ export default function DashboardScreen() {
             )}
 
             <View style={{ height: 8 }} />
-            <Button title="Fechar detalhe" variant="ghost" onPress={() => setGrupoDetalhe(null)} />
+            <Button title="Fechar" variant="ghost" onPress={() => setGrupoDetalhe(null)} />
           </Card>
         </>
       ) : null}
 
       <View style={{ height: 10 }} />
 
-      <Card>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>Saldos por conta (até hoje)</Text>
-            <Text style={styles.sectionHint}>Aqui é saldo real (inclui transferências pois alteram saldo individual).</Text>
-          </View>
-          <View>
-            <Button title="Ver lançamentos" variant="ghost" onPress={() => navigation.navigate('Lancamentos')} />
-          </View>
-        </View>
-
-        <View style={{ height: 10 }} />
-
-        <View style={styles.accountsGrid}>
-          {saldosOrdenados.map((c: any) => {
-            const tipo = String(c.tipo || '').toLowerCase();
-            const badge = tipo === 'cartao' ? 'CARTÃO' : tipo === 'banco' ? 'BANCO' : (c.tipo || 'CONTA').toUpperCase();
-            const saldo = Number(c.saldo || 0);
-
-            return (
-              <Card key={c.id} style={styles.accountCard} noShadow>
-                <Text style={styles.accountName} numberOfLines={1}>{c.nome}</Text>
-                <Text style={styles.accountType}>{badge}</Text>
-                <Text style={[styles.accountSaldo, saldo >= 0 ? styles.pos : styles.neg]}>{formatMoney(saldo)}</Text>
-              </Card>
-            );
-          })}
-        </View>
-
-        <View style={{ height: 6 }} />
-        <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11 }}>
-          Total (contas): {formatMoney(saldoTotalContas)}
-        </Text>
-      </Card>
+      {/* ── Grafico de gastos ── */}
+      <SimpleBarChart
+        title="Gastos ao longo do periodo"
+        subtitle={serieGastos.subtitle}
+        points={serieGastos.points}
+        valueFormatter={formatMoney}
+      />
 
       <View style={{ height: 10 }} />
 
+      {/* ── Ultimas despesas ── */}
       <Card>
-        <Text style={styles.sectionTitle}>Últimas despesas (período)</Text>
-        <Text style={styles.sectionHint}>Toque para abrir a edição do lançamento.</Text>
+        <Text style={styles.sectionTitle}>Ultimas despesas</Text>
+        <Text style={styles.sectionHint}>Toque para abrir a edicao do lancamento.</Text>
 
         <View style={{ height: 10 }} />
 
         {ultimasDespesas.length === 0 ? (
-          <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem despesas no período.</Text>
+          <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem despesas no periodo.</Text>
         ) : (
           ultimasDespesas.map((x) => (
             <Pressable
@@ -1208,10 +1305,10 @@ export default function DashboardScreen() {
                     {x.desc}
                   </Text>
                   <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }} numberOfLines={1}>
-                    {x.dt} • {x.conta}
+                    {x.dt} - {x.conta}
                   </Text>
                   <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                    {x.g} • {x.s}
+                    {x.g} - {x.s}
                   </Text>
                 </View>
                 <Text style={{ color: '#f87171', fontWeight: '600', fontSize: 13 }}>{formatMoney(x.v)}</Text>
@@ -1252,18 +1349,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  accountsGrid: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' },
+  accountsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   accountCard: {
     flexGrow: 1,
-    flexBasis: 220,
+    flexBasis: 140,
     padding: 12,
-    marginRight: 10,
-    marginBottom: 10,
     backgroundColor: '#161b22',
     borderColor: '#21262d',
     borderRadius: 12,
   },
-  accountName: { color: '#e6edf3', fontWeight: '600', fontSize: 13 },
-  accountType: { marginTop: 4, color: '#7d8590', fontWeight: '400', fontSize: 11 },
-  accountSaldo: { marginTop: 8, fontWeight: '600', fontSize: 14 },
+  accountName: { color: '#e6edf3', fontWeight: '600', fontSize: 12, marginTop: 2 },
+  accountType: { color: '#7d8590', fontWeight: '400', fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase' },
+  accountSaldo: { marginTop: 6, fontWeight: '600', fontSize: 13 },
 });

@@ -550,10 +550,15 @@ export default function LancamentosScreen() {
     };
   }, [carregarTela]);
 
+  const primeiroFocoRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
-      if (!loading) carregarTela();
-    }, [carregarTela, loading])
+      if (primeiroFocoRef.current) {
+        primeiroFocoRef.current = false;
+        return;
+      }
+      carregarTela();
+    }, [carregarTela])
   );
 
   const onRefresh = useCallback(async () => {
@@ -667,22 +672,19 @@ export default function LancamentosScreen() {
     ordemData,
   ]);
 
-  const saldoFinal = useMemo(() => {
+  const resumoPeriodo = useMemo(() => {
     const incluirTransfer = filtroContaId !== 'todos';
-    let s = 0;
+    let receita = 0, despesa = 0, transferencia = 0;
 
     for (const l of lancamentosFiltrados) {
       const raw = Number(l.valor || 0);
       const t = String(l.tipo || '').toLowerCase();
-
-      if (t === 'despesa') s += -Math.abs(raw);
-      else if (t === 'receita') s += Math.abs(raw);
-      else if (t === 'transferencia') {
-        if (incluirTransfer) s += raw;
-      }
+      if (t === 'receita') receita += Math.abs(raw);
+      else if (t === 'despesa') despesa += Math.abs(raw);
+      else if (t === 'transferencia' && incluirTransfer) transferencia += raw;
     }
 
-    return s;
+    return { receita, despesa, saldo: receita - despesa + transferencia, n: lancamentosFiltrados.length };
   }, [lancamentosFiltrados, filtroContaId]);
 
   const abrirNovo = () => navigation.navigate('NovoLancamento');
@@ -753,14 +755,15 @@ export default function LancamentosScreen() {
     ]);
   };
 
-  const limparPeriodo = () => {
+  const limparTudo = () => {
     setDataInicio('');
     setDataFim('');
-  };
-
-  const limparCategoria = () => {
+    setFiltroTipo('todos');
+    setFiltroStatus('todos');
+    setFiltroContaId('todos');
     setFiltroGrupo('');
     setFiltroSubgrupo('');
+    setBusca('');
   };
 
   if (loading) {
@@ -820,11 +823,6 @@ export default function LancamentosScreen() {
           </View>
         </View>
 
-        <View style={{ height: 10 }} />
-        <View style={styles.filterRow}>
-          <Chip label="Limpar período" active={false} onPress={limparPeriodo} />
-        </View>
-
         <View style={{ height: 8 }} />
         <Text style={styles.periodHint}>{hintPeriodo}</Text>
 
@@ -835,10 +833,12 @@ export default function LancamentosScreen() {
             <View style={styles.filterRow}>
               {filtroGrupo.trim() ? <Chip label={`Grupo: ${filtroGrupo.trim()}`} active onPress={() => {}} /> : null}
               {filtroSubgrupo.trim() ? <Chip label={`Sub: ${filtroSubgrupo.trim()}`} active onPress={() => {}} /> : null}
-              <Chip label="Limpar categoria" active={false} onPress={limparCategoria} />
             </View>
           </>
         ) : null}
+
+        <View style={{ height: 10 }} />
+        <Chip label="Limpar todos os filtros" active={false} onPress={limparTudo} />
 
         <View style={{ height: 10 }} />
 
@@ -882,9 +882,24 @@ export default function LancamentosScreen() {
       <View style={{ height: 10 }} />
 
       <Card noShadow>
-        <Text style={styles.summaryLabel}>Saldo final no filtro</Text>
-        <Text style={[styles.summaryValue, saldoFinal >= 0 ? styles.pos : styles.neg]}>{formatMoney(saldoFinal)}</Text>
-        <Text style={styles.summaryHint}>{hintSaldo}</Text>
+        <Text style={styles.summaryLabel}>Resumo do filtro • {resumoPeriodo.n} lançamento(s)</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(74,222,128,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(74,222,128,0.25)' }}>
+            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>RECEITAS</Text>
+            <Text style={{ color: fg.colors.accent, fontWeight: '900', fontSize: 13 }}>+{formatMoney(resumoPeriodo.receita)}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: 'rgba(248,113,113,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.25)' }}>
+            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>DESPESAS</Text>
+            <Text style={{ color: fg.colors.danger, fontWeight: '900', fontSize: 13 }}>-{formatMoney(resumoPeriodo.despesa)}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: resumoPeriodo.saldo >= 0 ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: resumoPeriodo.saldo >= 0 ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)' }}>
+            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>SALDO</Text>
+            <Text style={{ color: resumoPeriodo.saldo >= 0 ? fg.colors.accent : fg.colors.danger, fontWeight: '900', fontSize: 13 }}>
+              {resumoPeriodo.saldo >= 0 ? '+' : '-'}{formatMoney(Math.abs(resumoPeriodo.saldo))}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.summaryHint, { marginTop: 8 }]}>{hintSaldo}</Text>
       </Card>
 
       <View style={{ height: 10 }} />

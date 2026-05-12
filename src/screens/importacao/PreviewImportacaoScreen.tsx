@@ -270,6 +270,8 @@ export default function PreviewImportacaoScreen() {
   );
   const saldoExtratoRefNum = useMemo(() => parseMoneyToNumber(saldoExtratoRefStr), [saldoExtratoRefStr]);
 
+  const [dataCaixaFatura, setDataCaixaFatura] = useState('');
+
   const [mostrarApenasPendentes, setMostrarApenasPendentes] = useState(true);
   const [busca, setBusca] = useState('');
 
@@ -572,6 +574,11 @@ export default function PreviewImportacaoScreen() {
       const refISO = String((p as any).dataReferencia || todayISO());
       const cartao = String((p as any)?.contaTipo || '').toLowerCase() === 'cartao';
 
+      if (cartao) {
+        const refISO = String((p as any).dataReferencia || todayISO());
+        safeSetState(() => setDataCaixaFatura(setDay28(refISO)));
+      }
+
       const { data: catData, error: catError } = await supabase
         .from('categorias')
         .select('id, grupo, subgrupo, ativa, tipo, tipo_permitido')
@@ -777,7 +784,7 @@ export default function PreviewImportacaoScreen() {
         subgrupo: cat.subgrupo,
         conta_id: (payload as any).contaId,
         data_despesa: l.data,
-        data_caixa: contaEhCartaoLocal ? setDay28(l.data) : l.data,
+        data_caixa: contaEhCartaoLocal ? dataCaixaFatura : l.data,
         descricao: l.descricao,
         descricao_normalizada: normalizarTexto(l.descricao),
         valor: Math.abs(Number(l.valor) || 0),
@@ -918,6 +925,14 @@ export default function PreviewImportacaoScreen() {
       return;
     }
 
+    const contaEhCartaoAgora = String((payload as any)?.contaTipo || '').toLowerCase() === 'cartao';
+    if (contaEhCartaoAgora && !isISODateYYYYMMDD(dataCaixaFatura)) {
+      const msg = 'Informe a data de pagamento da fatura (Data de Caixa) no formato AAAA-MM-DD.';
+      safeSetState(() => setMsgAcao(msg));
+      alertar('Validação', msg);
+      return;
+    }
+
     let permitirPendentes = false;
     if (indicadores.naoCategorizados > 0) {
       const ok = await confirmarWebOuNative(
@@ -986,6 +1001,39 @@ export default function PreviewImportacaoScreen() {
               corteFuturos.linhasRemovidas || 0
             )} linhas removidas).`}
           />
+        ) : null}
+
+        {contaEhCartao ? (
+          <FGCard style={{ marginBottom: 8, borderColor: isISODateYYYYMMDD(dataCaixaFatura) ? 'rgba(74,222,128,0.35)' : 'rgba(246,196,83,0.5)' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: fg.colors.accent, fontWeight: '900', fontSize: 12, marginBottom: 2 }}>
+                  DATA DE PAGAMENTO DA FATURA
+                </Text>
+                <Text style={{ color: fg.colors.muted, fontSize: 11, marginBottom: 8 }}>
+                  Data de caixa aplicada a todos os lançamentos desta importação
+                </Text>
+                <FGInput
+                  value={dataCaixaFatura}
+                  onChangeText={setDataCaixaFatura}
+                  placeholder="AAAA-MM-DD"
+                  editable={!salvando}
+                />
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 24 }}>💳</Text>
+                {isISODateYYYYMMDD(dataCaixaFatura) ? (
+                  <Text style={{ color: fg.colors.accent, fontSize: 11, fontWeight: '900', marginTop: 4 }}>
+                    {formatarDataBR(dataCaixaFatura)}
+                  </Text>
+                ) : (
+                  <Text style={{ color: fg.colors.warn, fontSize: 11, fontWeight: '900', marginTop: 4 }}>
+                    Obrigatório
+                  </Text>
+                )}
+              </View>
+            </View>
+          </FGCard>
         ) : null}
 
         {erroTela ? <FGAlertBox variant="danger" text={erroTela} /> : null}

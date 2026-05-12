@@ -25,7 +25,7 @@ type Categoria = {
   id: string;
   grupo_id: string;
   usuario_id: string | null;
-  tipo: 'receita' | 'despesa' | 'transferencia';
+  tipo: 'receita' | 'despesa' | 'transferencia' | null;
   grupo: string;
   subgrupo: string;
   ativa: boolean;
@@ -34,17 +34,20 @@ type Categoria = {
   updated_at: string;
 };
 
+type TipoForm = 'despesa' | 'receita' | 'transferencia' | 'ambos';
+
 type FormCategoria = {
   id?: string;
-  tipo: Categoria['tipo'];
+  tipo: TipoForm;
   grupo: string;
   subgrupo: string;
   ativa: boolean;
 };
 
-const TIPOS: Array<{ value: Categoria['tipo']; label: string }> = [
+const TIPOS: Array<{ value: TipoForm; label: string }> = [
   { value: 'despesa', label: 'Despesa' },
   { value: 'receita', label: 'Receita' },
+  { value: 'ambos', label: 'Desp/Rec' },
   { value: 'transferencia', label: 'Transferência' },
 ];
 
@@ -255,7 +258,7 @@ export default function CategoriasScreen() {
 
     setForm({
       id: cat.id,
-      tipo: cat.tipo,
+      tipo: (cat.tipo as TipoForm) || 'ambos',
       grupo: cat.grupo,
       subgrupo: cat.subgrupo,
       ativa: cat.ativa,
@@ -299,7 +302,7 @@ export default function CategoriasScreen() {
       const payload: any = {
         grupo_id: grupoAtivo.grupo_id,
         usuario_id: authData.user.id,
-        tipo: form.tipo,
+        tipo: form.tipo === 'ambos' ? null : form.tipo,
         grupo,
         subgrupo,
         ativa: form.ativa,

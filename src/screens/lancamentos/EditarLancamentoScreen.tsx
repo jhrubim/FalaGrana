@@ -123,6 +123,103 @@ function toValorTxt(n: number) {
   return s.includes('.') ? s.replace('.', ',') : s;
 }
 
+const SIMILARIDADE_THRESHOLD = 0.6;
+
+// Termos genéricos de transações financeiras que não identificam o lançamento
+const STOPWORDS_FINANCEIRAS = new Set([
+  'pix', 'ted', 'doc', 'transf', 'transferencia', 'transferência',
+  'pag', 'pagto', 'pagamento', 'pgto', 'boleto',
+  'dep', 'deposito', 'depósito', 'saque',
+  'compra', 'deb', 'debito', 'débito', 'cred', 'credito', 'crédito',
+  'tarifa', 'taxa', 'iof', 'stf',
+]);
+
+function tokenize(s: string): Set<string> {
+  return new Set(
+    normalizeText(s)
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOPWORDS_FINANCEIRAS.has(w))
+  );
+}
+
+function calcSimilaridade(a: string, b: string): number {
+  const sa = tokenize(a);
+  const sb = tokenize(b);
+  // se ambos ficam sem tokens identificadores após remover stopwords, sem match
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let intersect = 0;
+  sa.forEach((w) => { if (sb.has(w)) intersect++; });
+  // exige ao menos 1 token identificador em comum
+  if (intersect === 0) return 0;
+  return intersect / (sa.size + sb.size - intersect);
+}
+
+async function aplicarCategoriaEmSimilares(
+  grupoId: string,
+  descricaoRef: string,
+  idExcluir: string,
+  catId: string,
+  catGrupo: string | null,
+  catSubgrupo: string | null,
+  catLabel: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('transacoes')
+    .select('id, descricao, valor, tipo')
+    .eq('grupo_id', grupoId)
+    .or('categoria_id.is.null,subgrupo.eq.Não categorizado')
+    .neq('id', idExcluir)
+    .limit(5000);
+
+  if (error || !data || data.length === 0) return;
+
+  const similares = (data as any[]).filter(
+    (t) => calcSimilaridade(t.descricao || '', descricaoRef) >= SIMILARIDADE_THRESHOLD
+  );
+
+  if (similares.length === 0) return;
+
+  const MAX_PREVIEW = 8;
+  const preview = similares
+    .slice(0, MAX_PREVIEW)
+    .map((t: any) => {
+      const desc = (t.descricao || '(sem descrição)').trim();
+      const sinal = String(t.tipo || '').toLowerCase() === 'receita' ? '+' : '-';
+      const val = formatMoney(Math.abs(Number(t.valor || 0)));
+      return `• ${desc}  ${sinal}${val}`;
+    })
+    .join('\n');
+  const rodape = similares.length > MAX_PREVIEW
+    ? `\n  ... e mais ${similares.length - MAX_PREVIEW} lançamento(s)`
+    : '';
+
+  const confirmMsg =
+    `${similares.length} lançamento(s) similar(es) sem categoria:\n\n${preview}${rodape}\n\nAplicar "${catLabel}" a todos?`;
+
+  const ok =
+    Platform.OS === 'web'
+      ? window.confirm(confirmMsg)
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert('Auto-categorização', confirmMsg, [
+            { text: 'Ignorar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Aplicar a todos', onPress: () => resolve(true) },
+          ]);
+        });
+
+  if (!ok) return;
+
+  const ids = similares.map((t: any) => t.id);
+  const CHUNK = 200;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    await supabase
+      .from('transacoes')
+      .update({ categoria_id: catId, grupo: catGrupo, subgrupo: catSubgrupo })
+      .in('id', chunk)
+      .eq('grupo_id', grupoId);
+  }
+}
+
 /** ---------- UI ---------- */
 
 function Card({
@@ -248,7 +345,7 @@ function Input({
         keyboardType={keyboardType}
         style={[
           {
-            borderColor: border,
+            borderColor: 'rgba(74,222,128,0.35)',
             borderWidth: 1,
             backgroundColor: bg,
             borderRadius: 12,
@@ -362,24 +459,29 @@ function Select({
         }}
         style={({ pressed }) => [
           {
-            borderColor: border,
+            borderColor: disabled ? border : 'rgba(74,222,128,0.35)',
             borderWidth: 1,
             backgroundColor: bg,
             borderRadius: 12,
             paddingHorizontal: 12,
             paddingVertical: 12,
             opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
+            flexDirection: 'row',
+            alignItems: 'center',
           },
         ]}
       >
-        <Text style={{ color: fg.colors.text, fontWeight: '900', fontSize: 13 }}>
-          {current?.label || placeholder || 'Selecionar...'}
-        </Text>
-        {current?.subtitle ? (
-          <Text style={{ marginTop: 4, color: fg.colors.muted, fontWeight: '800', fontSize: 11 }}>
-            {current.subtitle}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: fg.colors.text, fontWeight: '900', fontSize: 13 }}>
+            {current?.label || placeholder || 'Selecionar...'}
           </Text>
-        ) : null}
+          {current?.subtitle ? (
+            <Text style={{ marginTop: 4, color: fg.colors.muted, fontWeight: '800', fontSize: 11 }}>
+              {current.subtitle}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={{ color: 'rgba(74,222,128,0.7)', fontSize: 14, marginLeft: 8 }}>▾</Text>
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -467,6 +569,7 @@ export default function EditarLancamentoScreen() {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
   const [dataDespesa, setDataDespesa] = useState<string>('');
+  const [dataCaixa, setDataCaixa] = useState<string>('');
   const [descricao, setDescricao] = useState<string>('');
   const [valorTxt, setValorTxt] = useState<string>('');
 
@@ -589,6 +692,7 @@ export default function EditarLancamentoScreen() {
 
       const dd = (neg?.data_despesa || pos?.data_despesa || row.data_despesa || row.data_caixa || '') as string;
       setDataDespesa(dd ? String(dd).slice(0, 10) : '');
+      setDataCaixa(dd ? String(dd).slice(0, 10) : '');
 
       const desc = (neg?.descricao || pos?.descricao || row.descricao || '') as string;
       setDescricao(desc || '');
@@ -608,6 +712,9 @@ export default function EditarLancamentoScreen() {
 
     const dd = (row.data_despesa || row.data_caixa || '') as string;
     setDataDespesa(dd ? String(dd).slice(0, 10) : '');
+
+    const dc = (row.data_caixa || '') as string;
+    setDataCaixa(dc ? String(dc).slice(0, 10) : (dd ? String(dd).slice(0, 10) : ''));
 
     setDescricao(row.descricao || '');
     setValorTxt(toValorTxt(Math.abs(Number(row.valor || 0))));
@@ -646,6 +753,11 @@ export default function EditarLancamentoScreen() {
     () => (contaId ? contas.find((c) => c.id === contaId) || null : null),
     [contaId, contas]
   );
+
+  const categoriaSelecionada = useMemo(
+    () => (categoriaId ? categorias.find((c) => c.id === categoriaId) || null : null),
+    [categoriaId, categorias]
+  );
   const contaDestino = useMemo(
     () => (contaDestinoId ? contas.find((c) => c.id === contaDestinoId) || null : null),
     [contaDestinoId, contas]
@@ -654,9 +766,8 @@ export default function EditarLancamentoScreen() {
   const categoriasFiltradas = useMemo(() => {
     if (tipo === 'transferencia') return [];
     const alvo = tipo === 'despesa' ? 'despesa' : 'receita';
-    const hasTipo = categorias.some((c) => !!c.tipo);
-    if (!hasTipo) return categorias;
-    return categorias.filter((c) => (c.tipo || '').toLowerCase() === alvo);
+    // categoria sem tipo definido → aparece para receita e despesa
+    return categorias.filter((c) => !c.tipo || (c.tipo || '').toLowerCase() === alvo);
   }, [categorias, tipo]);
 
   const contasOpts = useMemo<SelectOpt[]>(
@@ -773,10 +884,20 @@ export default function EditarLancamentoScreen() {
 
     const dt = parseYmd(dataDespesa);
     if (!dt) {
-      const msg = 'Data inválida. Use YYYY-MM-DD.';
+      const msg = 'Data da despesa inválida. Use YYYY-MM-DD.';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Erro', msg);
       return;
+    }
+
+    const isCartao = (contaOrigem?.tipo || '').toLowerCase() === 'cartao';
+    if (tipo !== 'transferencia' && isCartao) {
+      if (!parseYmd(dataCaixa)) {
+        const msg = 'Data de caixa inválida. Use YYYY-MM-DD.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Erro', msg);
+        return;
+      }
     }
 
     if (!contaId) {
@@ -837,20 +958,23 @@ export default function EditarLancamentoScreen() {
         const { error: delErr } = await supabase.rpc('excluir_transferencia', { p_transferencia_id: transferenciaIdOriginal });
         if (delErr) throw delErr;
 
-        const dataCaixa = dataCaixaFromContaTipo(dataDespesa, contaOrigem?.tipo);
+        const ehCartao = (contaOrigem?.tipo || '').toLowerCase() === 'cartao';
+        const dataCaixaFinal = ehCartao ? (dataCaixa || dataCaixaFromContaTipo(dataDespesa, 'cartao')) : dataDespesa;
 
         const row: any = {
           grupo_id: grupoAtivo.grupo_id,
           usuario_id: userId,
           conta_id: contaId,
           data_despesa: dataDespesa,
-          data_caixa: dataCaixa,
+          data_caixa: dataCaixaFinal,
           descricao: desc,
           valor: Math.abs(valor),
           tipo: tipo,
           status: status,
           origem: original.origem || 'manual',
           categoria_id: categoriaId,
+          grupo: categoriaSelecionada?.grupo || null,
+          subgrupo: categoriaSelecionada?.subgrupo || null,
           transferencia_id: null,
           eh_parcela: false,
           parcelamento_id: null,
@@ -858,6 +982,18 @@ export default function EditarLancamentoScreen() {
 
         const { error: insErr } = await supabase.from('transacoes').insert([row]);
         if (insErr) throw insErr;
+
+        if (categoriaId) {
+          await aplicarCategoriaEmSimilares(
+            grupoAtivo.grupo_id,
+            desc,
+            original.id,
+            categoriaId,
+            categoriaSelecionada?.grupo || null,
+            categoriaSelecionada?.subgrupo || null,
+            categoriaSelecionada?.subgrupo || categoriaSelecionada?.nome || 'Categoria'
+          );
+        }
 
         DeviceEventEmitter.emit('FG_REFRESH_ALL');
         navigation.goBack();
@@ -910,21 +1046,36 @@ export default function EditarLancamentoScreen() {
         return;
       }
 
-      const dataCaixa = dataCaixaFromContaTipo(dataDespesa, contaOrigem?.tipo);
+      const ehCartao = (contaOrigem?.tipo || '').toLowerCase() === 'cartao';
+      const dataCaixaFinal = ehCartao ? (dataCaixa || dataCaixaFromContaTipo(dataDespesa, 'cartao')) : dataDespesa;
 
       const patch: any = {
         conta_id: contaId,
         data_despesa: dataDespesa,
-        data_caixa: dataCaixa,
+        data_caixa: dataCaixaFinal,
         descricao: desc,
         valor: Math.abs(valor),
         tipo: tipo,
         status: status,
         categoria_id: categoriaId,
+        grupo: categoriaSelecionada?.grupo || null,
+        subgrupo: categoriaSelecionada?.subgrupo || null,
       };
 
       const { error: upErr } = await supabase.from('transacoes').update(patch).eq('id', original.id).eq('grupo_id', grupoAtivo.grupo_id);
       if (upErr) throw upErr;
+
+      if (categoriaId) {
+        await aplicarCategoriaEmSimilares(
+          grupoAtivo.grupo_id,
+          desc,
+          original.id,
+          categoriaId,
+          categoriaSelecionada?.grupo || null,
+          categoriaSelecionada?.subgrupo || null,
+          categoriaSelecionada?.subgrupo || categoriaSelecionada?.nome || 'Categoria'
+        );
+      }
 
       DeviceEventEmitter.emit('FG_REFRESH_ALL');
       navigation.goBack();
@@ -1026,13 +1177,27 @@ export default function EditarLancamentoScreen() {
           onChangeText={setDataDespesa}
           keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
         />
-        <Text style={styles.helper}>
-          {tipo === 'transferencia'
-            ? 'Transferência: Data de Caixa = Data da Despesa.'
-            : (contaOrigem?.tipo || '').toLowerCase() === 'cartao'
-              ? 'Cartão: Data de Caixa será fixada em 28 do mês.'
-              : 'Data de Caixa seguirá a Data da Despesa (conta não-cartão).'}
-        </Text>
+        {tipo !== 'transferencia' && (contaOrigem?.tipo || '').toLowerCase() === 'cartao' ? (
+          <>
+            <View style={{ height: 12 }} />
+            <Input
+              label="Data de Caixa — pagamento da fatura *"
+              placeholder="YYYY-MM-DD"
+              value={dataCaixa}
+              onChangeText={setDataCaixa}
+              keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
+            />
+            <Text style={styles.helper}>
+              Data em que o dinheiro sai da conta (pagamento da fatura do cartão).
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.helper}>
+            {tipo === 'transferencia'
+              ? 'Transferência: Data de Caixa = Data da Despesa.'
+              : 'Data de Caixa seguirá a Data da Despesa.'}
+          </Text>
+        )}
       </Card>
 
       <View style={{ height: 10 }} />
