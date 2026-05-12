@@ -692,7 +692,9 @@ export default function EditarLancamentoScreen() {
 
       const dd = (neg?.data_despesa || pos?.data_despesa || row.data_despesa || row.data_caixa || '') as string;
       setDataDespesa(dd ? String(dd).slice(0, 10) : '');
-      setDataCaixa(dd ? String(dd).slice(0, 10) : '');
+      // Para transferências, carrega data_caixa da perna positiva (destino cartão pode ter valor diferente)
+      const dcTransf = (pos?.data_caixa || neg?.data_caixa || dd) as string;
+      setDataCaixa(dcTransf ? String(dcTransf).slice(0, 10) : (dd ? String(dd).slice(0, 10) : ''));
 
       const desc = (neg?.descricao || pos?.descricao || row.descricao || '') as string;
       setDescricao(desc || '');
@@ -891,9 +893,18 @@ export default function EditarLancamentoScreen() {
     }
 
     const isCartao = (contaOrigem?.tipo || '').toLowerCase() === 'cartao';
+    const isDestinoCartao = (contaDestino?.tipo || '').toLowerCase() === 'cartao';
     if (tipo !== 'transferencia' && isCartao) {
       if (!parseYmd(dataCaixa)) {
         const msg = 'Data de caixa inválida. Use YYYY-MM-DD.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Erro', msg);
+        return;
+      }
+    }
+    if (tipo === 'transferencia' && isDestinoCartao) {
+      if (!parseYmd(dataCaixa)) {
+        const msg = 'Data de caixa inválida para o cartão destino. Use YYYY-MM-DD.';
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Erro', msg);
         return;
@@ -1004,9 +1015,10 @@ export default function EditarLancamentoScreen() {
         const { error: delErr } = await supabase.from('transacoes').delete().eq('id', original.id).eq('grupo_id', grupoAtivo.grupo_id);
         if (delErr) throw delErr;
 
+        const dataCaixaTransf = isDestinoCartao ? (dataCaixa || dataDespesa) : dataDespesa;
         const { error: rpcErr } = await supabase.rpc('criar_transferencia', {
           p_usuario_id: userId,
-          p_data_caixa: dataDespesa,
+          p_data_caixa: dataCaixaTransf,
           p_data_despesa: dataDespesa,
           p_conta_origem_id: contaId,
           p_conta_destino_id: contaDestinoId,
@@ -1027,9 +1039,10 @@ export default function EditarLancamentoScreen() {
         const { error: delErr } = await supabase.rpc('excluir_transferencia', { p_transferencia_id: transferenciaIdOriginal });
         if (delErr) throw delErr;
 
+        const dataCaixaTransf = isDestinoCartao ? (dataCaixa || dataDespesa) : dataDespesa;
         const { error: rpcErr } = await supabase.rpc('criar_transferencia', {
           p_usuario_id: userId,
-          p_data_caixa: dataDespesa,
+          p_data_caixa: dataCaixaTransf,
           p_data_despesa: dataDespesa,
           p_conta_origem_id: contaId,
           p_conta_destino_id: contaDestinoId,
@@ -1177,26 +1190,26 @@ export default function EditarLancamentoScreen() {
           onChangeText={setDataDespesa}
           keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
         />
-        {tipo !== 'transferencia' && (contaOrigem?.tipo || '').toLowerCase() === 'cartao' ? (
+        {(tipo === 'transferencia' || (contaOrigem?.tipo || '').toLowerCase() === 'cartao') ? (
           <>
             <View style={{ height: 12 }} />
             <Input
-              label="Data de Caixa — pagamento da fatura *"
+              label="Data de Caixa *"
               placeholder="YYYY-MM-DD"
               value={dataCaixa}
               onChangeText={setDataCaixa}
               keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
             />
             <Text style={styles.helper}>
-              Data em que o dinheiro sai da conta (pagamento da fatura do cartão).
+              {tipo === 'transferencia'
+                ? (contaDestino?.tipo || '').toLowerCase() === 'cartao'
+                  ? 'Data em que o dinheiro entra no cartão (pagamento da fatura).'
+                  : 'Para transferência entre contas normais, deixe igual à data da despesa.'
+                : 'Data em que o dinheiro sai da conta (pagamento da fatura do cartão).'}
             </Text>
           </>
         ) : (
-          <Text style={styles.helper}>
-            {tipo === 'transferencia'
-              ? 'Transferência: Data de Caixa = Data da Despesa.'
-              : 'Data de Caixa seguirá a Data da Despesa.'}
-          </Text>
+          <Text style={styles.helper}>Data de Caixa seguirá a Data da Despesa.</Text>
         )}
       </Card>
 

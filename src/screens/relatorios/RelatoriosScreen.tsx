@@ -313,23 +313,50 @@ export default function RelatoriosScreen() {
     anoRef: number,
     base: 'despesa' | 'caixa',
   ) => {
-    // Filtra pelo campo correto conforme o modo selecionado
-    const colData = base === 'caixa' ? 'data_caixa' : 'data_despesa';
-    const [contasRes, lancRes] = await Promise.all([
-      supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome'),
-      supabase
-        .from('transacoes')
-        .select('id, data_despesa, data_caixa, descricao, valor, tipo, grupo, subgrupo, conta_id')
-        .eq('grupo_id', grupoId)
-        .gte(colData, `${anoRef}-01-01`)
-        .lte(colData, `${anoRef}-12-31`)
-        .in('tipo', ['despesa', 'receita'])
-        .limit(12000),
-    ]);
-    if (contasRes.error) throw new Error(contasRes.error.message);
-    if (lancRes.error) throw new Error(lancRes.error.message);
-    setContas((contasRes.data || []) as Conta[]);
-    setLancamentos((lancRes.data || []) as Lancamento[]);
+    const start = `${anoRef}-01-01`;
+    const end = `${anoRef}-12-31`;
+    const select = 'id, data_despesa, data_caixa, descricao, valor, tipo, grupo, subgrupo, conta_id';
+
+    let lancamentos: Lancamento[];
+
+    if (base === 'caixa') {
+      // Duas queries: (1) com data_caixa no período, (2) data_caixa nulo + data_despesa no período
+      const [contasRes, comCaixa, semCaixa] = await Promise.all([
+        supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome'),
+        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita', 'transferencia'])
+          .not('data_caixa', 'is', null)
+          .gte('data_caixa', start).lte('data_caixa', end)
+          .limit(12000),
+        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita', 'transferencia'])
+          .is('data_caixa', null)
+          .gte('data_despesa', start).lte('data_despesa', end)
+          .limit(4000),
+      ]);
+      if (contasRes.error) throw new Error(contasRes.error.message);
+      if (comCaixa.error) throw new Error(comCaixa.error.message);
+      if (semCaixa.error) throw new Error(semCaixa.error.message);
+      setContas((contasRes.data || []) as Conta[]);
+      lancamentos = [
+        ...((comCaixa.data || []) as Lancamento[]),
+        ...((semCaixa.data || []) as Lancamento[]),
+      ];
+    } else {
+      const [contasRes, lancRes] = await Promise.all([
+        supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome'),
+        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita', 'transferencia'])
+          .gte('data_despesa', start).lte('data_despesa', end)
+          .limit(12000),
+      ]);
+      if (contasRes.error) throw new Error(contasRes.error.message);
+      if (lancRes.error) throw new Error(lancRes.error.message);
+      setContas((contasRes.data || []) as Conta[]);
+      lancamentos = (lancRes.data || []) as Lancamento[];
+    }
+
+    setLancamentos(lancamentos);
   }, []);
 
   const inicializar = useCallback(async (base?: 'despesa' | 'caixa') => {
@@ -380,8 +407,11 @@ export default function RelatoriosScreen() {
   // ─── Dados derivados ──────────────────────────────────────────────────────
 
   const getDataLanc = useCallback((l: Lancamento): string => {
-    // A query já filtrou pelo campo correto; aqui só escolhemos qual campo usar no agrupamento
-    if (basePeriodo === 'caixa') return (l.data_caixa || '').slice(0, 7);
+    if (basePeriodo === 'caixa') {
+      // Se data_caixa não foi preenchida, usa data_despesa como fallback
+      const dc = l.data_caixa || l.data_despesa;
+      return (dc || '').slice(0, 7);
+    }
     return (l.data_despesa || '').slice(0, 7);
   }, [basePeriodo]);
 
@@ -398,8 +428,11 @@ export default function RelatoriosScreen() {
       let despesa = 0, receita = 0;
       for (const l of lancConta) {
         if (getDataLanc(l) !== chave) continue;
-        const val = Math.abs(Number(l.valor || 0));
-        if (l.tipo === 'despesa') despesa += val;
+        const raw = Number(l.valor || 0);
+        const val = Math.abs(raw);
+        if (l.tipo === 'transferencia') {
+          if (raw > 0) receita += val; else despesa += val;
+        } else if (l.tipo === 'despesa') despesa += val;
         else if (l.tipo === 'receita') receita += val;
       }
       return { mes: m, label, despesa, receita };
@@ -416,8 +449,11 @@ export default function RelatoriosScreen() {
   const resumo = useMemo(() => {
     let receita = 0, despesa = 0;
     for (const l of lancPeriodo) {
-      const val = Math.abs(Number(l.valor || 0));
-      if (l.tipo === 'receita') receita += val;
+      const raw = Number(l.valor || 0);
+      const val = Math.abs(raw);
+      if (l.tipo === 'transferencia') {
+        if (raw > 0) receita += val; else despesa += val;
+      } else if (l.tipo === 'receita') receita += val;
       else if (l.tipo === 'despesa') despesa += val;
     }
     return { receita, despesa, saldo: receita - despesa, n: lancPeriodo.length };
