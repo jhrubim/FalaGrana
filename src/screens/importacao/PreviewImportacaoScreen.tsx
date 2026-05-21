@@ -797,18 +797,10 @@ export default function PreviewImportacaoScreen() {
       };
     });
 
-    let registrosFinal = dedupeLocal(registrosBase, (r: any) =>
-      fpTx({
-        grupo_id: r.grupo_id,
-        conta_id: r.conta_id,
-        data_despesa: r.data_despesa,
-        data_caixa: r.data_caixa,
-        tipo: r.tipo,
-        valor: Number(r.valor || 0),
-        descricao_normalizada: r.descricao_normalizada || '',
-      })
-    );
-    const removidosNoLote = registrosBase.length - registrosFinal.length;
+    // Permite duplicatas legítimas no mesmo lote (ex: dois táxis do mesmo valor no mesmo dia).
+    // A verificação contra o banco (abaixo) cuida dos já importados.
+    let registrosFinal = [...registrosBase];
+    const removidosNoLote = 0;
 
     const datas = registrosFinal.map((r: any) => r.data_despesa).filter(Boolean).sort();
     const dataMin = datas[0];
