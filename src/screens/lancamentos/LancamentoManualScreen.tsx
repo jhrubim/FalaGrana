@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
@@ -441,10 +442,45 @@ function Select({
   );
 }
 
+function DateShortcuts({ value, onSelect }: { value: string; onSelect: (v: string) => void }) {
+  const hoje = new Date();
+  const ontem = new Date(Date.now() - 86400000);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const opts = [
+    { label: 'Hoje', val: fmt(hoje) },
+    { label: 'Ontem', val: fmt(ontem) },
+  ];
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+      {opts.map((o) => (
+        <Pressable
+          key={o.val}
+          onPress={() => onSelect(o.val)}
+          style={({ pressed }) => ({
+            paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+            backgroundColor: value === o.val ? fg.colors.accentSoft : 'transparent',
+            borderWidth: 1, borderColor: value === o.val ? fg.colors.accent : fg.colors.border,
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ color: value === o.val ? fg.colors.accent : fg.colors.muted, fontSize: 11, fontWeight: '600' }}>
+            {o.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 /** ---------- Screen ---------- */
 
 export default function LancamentoManualScreen() {
   const navigation = useNavigation<any>();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const [loading, setLoading] = useState(true);
 
@@ -459,6 +495,7 @@ export default function LancamentoManualScreen() {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
   const [dataDespesa, setDataDespesa] = useState<string>(yyyyMmDd(new Date()));
+  const [dataCaixa, setDataCaixa] = useState<string>(yyyyMmDd(new Date()));
 
   const [descricao, setDescricao] = useState<string>('');
   const [valorTxt, setValorTxt] = useState<string>('');
@@ -643,6 +680,15 @@ export default function LancamentoManualScreen() {
   }, [tipo]);
 
   useEffect(() => {
+    const isCartao = (contaOrigem?.tipo || '').toLowerCase() === 'cartao';
+    if (isCartao) {
+      setDataCaixa(dataCaixaFromContaTipo(dataDespesa, 'cartao'));
+    } else {
+      setDataCaixa(dataDespesa);
+    }
+  }, [dataDespesa, contaOrigem?.tipo]);
+
+  useEffect(() => {
     if (tipo === 'transferencia' && (contaDestino?.tipo || '').toLowerCase() === 'cartao') {
       if (!descricao.trim() || descricao.trim().toLowerCase() === 'transferência') {
         setDescricao('Pagamento de fatura');
@@ -743,7 +789,9 @@ export default function LancamentoManualScreen() {
         return;
       }
 
-      const dataCaixa = dataCaixaFromContaTipo(dataDespesa, contaOrigem?.tipo);
+      const dataCaixaFinal = (contaOrigem?.tipo || '').toLowerCase() === 'cartao'
+        ? (dataCaixa || dataCaixaFromContaTipo(dataDespesa, 'cartao'))
+        : dataDespesa;
 
       if (tipo === 'despesa' && ehParcela) {
         const total = Math.max(2, Math.min(120, parseInt(totalParcelasTxt || '2', 10) || 2));
@@ -796,7 +844,7 @@ export default function LancamentoManualScreen() {
         usuario_id: userId,
         conta_id: contaId,
         data_despesa: dataDespesa,
-        data_caixa: dataCaixa,
+        data_caixa: dataCaixaFinal,
         descricao: desc,
         valor: Math.abs(valor),
         tipo,
@@ -834,7 +882,11 @@ export default function LancamentoManualScreen() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={[styles.container, isDesktop && { alignItems: 'center', paddingHorizontal: 28 }]}
+    >
+      <View style={{ width: '100%', maxWidth: isDesktop ? 720 : undefined }}>
       <Card>
         <Text style={styles.title}>Novo Lançamento</Text>
         <Text style={styles.subtitle}>{grupoAtivo?.nome_grupo || 'Minha Carteira'}</Text>
@@ -862,14 +914,28 @@ export default function LancamentoManualScreen() {
 
       <View style={{ height: 10 }} />
 
-      <Card>
-        <Text style={styles.sectionLabel}>Tipo</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <Chip label="Despesa" active={tipo === 'despesa'} onPress={() => setTipo('despesa')} />
-          <Chip label="Receita" active={tipo === 'receita'} onPress={() => setTipo('receita')} />
-          <Chip label="Transferência" active={tipo === 'transferencia'} onPress={() => setTipo('transferencia')} />
-        </View>
-      </Card>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+        {([
+          { value: 'despesa', label: 'Despesa', color: fg.colors.danger, bg: fg.colors.dangerSoft },
+          { value: 'receita', label: 'Receita', color: fg.colors.accent, bg: fg.colors.accentSoft },
+          { value: 'transferencia', label: 'Transferência', color: fg.colors.info, bg: fg.colors.infoSoft },
+        ] as const).map((t) => (
+          <Pressable
+            key={t.value}
+            onPress={() => setTipo(t.value as TipoLanc)}
+            style={({ pressed }) => ({
+              flex: 1, paddingVertical: 10, borderRadius: fg.radius.md, alignItems: 'center',
+              backgroundColor: tipo === t.value ? t.bg : fg.colors.surface,
+              borderWidth: 1, borderColor: tipo === t.value ? t.color : fg.colors.border,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Text style={{ color: tipo === t.value ? t.color : fg.colors.muted, fontSize: 12, fontWeight: '700' }}>
+              {t.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       <View style={{ height: 10 }} />
 
@@ -906,19 +972,34 @@ export default function LancamentoManualScreen() {
 
       <Card>
         <Input
-          label="Data da Despesa *"
-          placeholder="YYYY-MM-DD"
+          label="Data da despesa *"
+          placeholder="AAAA-MM-DD"
           value={dataDespesa}
           onChangeText={setDataDespesa}
           keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
         />
-        <Text style={styles.helper}>
-          {tipo === 'transferencia'
-            ? 'Transferência: Data de Caixa = Data da Despesa.'
-            : (contaOrigem?.tipo || '').toLowerCase() === 'cartao'
-              ? 'Cartão: Data de Caixa será fixada em 28 do mês.'
-              : 'Data de Caixa seguirá a Data da Despesa (conta não-cartão).'}
-        </Text>
+        <DateShortcuts value={dataDespesa} onSelect={setDataDespesa} />
+        {(tipo !== 'transferencia' && (contaOrigem?.tipo || '').toLowerCase() === 'cartao') ? (
+          <>
+            <View style={{ height: 12 }} />
+            <Input
+              label="Data de caixa *"
+              placeholder="AAAA-MM-DD"
+              value={dataCaixa}
+              onChangeText={setDataCaixa}
+              keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
+            />
+            <Text style={[styles.helper, { marginTop: 8 }]}>
+              Data em que o valor sai da conta (pagamento da fatura). Edite se necessário.
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.helper, { marginTop: 8 }]}>
+            {tipo === 'transferencia'
+              ? 'Transferência: Data de Caixa = Data da Despesa.'
+              : 'Data de Caixa seguirá a Data da Despesa.'}
+          </Text>
+        )}
       </Card>
 
       <View style={{ height: 10 }} />
@@ -995,6 +1076,7 @@ export default function LancamentoManualScreen() {
       </View>
 
       <View style={{ height: 18 }} />
+      </View>
     </ScrollView>
   );
 }

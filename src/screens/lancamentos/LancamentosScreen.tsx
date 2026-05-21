@@ -12,21 +12,19 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { fg } from '../../theme/fgTheme';
 
-type GrupoAtivo = {
-  grupo_id: string;
-  papel: 'owner' | 'viewer';
-  nome_grupo: string;
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type GrupoAtivo = { grupo_id: string; papel: 'owner' | 'viewer'; nome_grupo: string };
 
 type Lancamento = {
   id: string;
   transferencia_id: string | null;
-
   grupo_id: string;
   data_caixa: string | null;
   data_despesa: string | null;
@@ -45,356 +43,10 @@ type Lancamento = {
   created_at: string | null;
 };
 
-type Conta = {
-  id: string;
-  nome: string;
-  tipo?: string | null;
-};
-
+type Conta = { id: string; nome: string; tipo?: string | null };
 type FiltroStatus = 'todos' | 'confirmada' | 'pendente';
 type FiltroTipo = 'todos' | 'despesa' | 'receita' | 'transferencia';
-
-const TIPOS: Array<{ value: FiltroTipo; label: string }> = [
-  { value: 'todos', label: 'Todos' },
-  { value: 'despesa', label: 'Despesa' },
-  { value: 'receita', label: 'Receita' },
-  { value: 'transferencia', label: 'Transferência' },
-];
-
-const STATUS_OPTS: Array<{ value: FiltroStatus; label: string }> = [
-  { value: 'todos', label: 'Todos' },
-  { value: 'confirmada', label: 'Confirmadas' },
-  { value: 'pendente', label: 'Pendentes' },
-];
-
-function formatMoney(v?: number | null) {
-  const n = Number(v || 0);
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function normalizaTexto(v?: string | null) {
-  return (v || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-}
-
-function parseDateSafe(s?: string | null) {
-  if (!s) return 0;
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? 0 : t;
-}
-
-function isValidYmd(s: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test((s || '').trim());
-}
-
-function normEq(a?: string | null, b?: string | null) {
-  return normalizaTexto(a || '').trim() === normalizaTexto(b || '').trim();
-}
-
-/** ---------- UI local ---------- */
-
-function Card({
-  children,
-  style,
-  noShadow,
-}: {
-  children: React.ReactNode;
-  style?: any;
-  noShadow?: boolean;
-}) {
-  const bg =
-    (fg as any)?.colors?.card ||
-    (fg as any)?.colors?.surface ||
-    '#161b22';
-  const border = (fg as any)?.colors?.border || '#21262d';
-
-  return (
-    <View
-      style={[
-        {
-          backgroundColor: bg,
-          borderColor: border,
-          borderWidth: 1,
-          borderRadius: 14,
-          padding: 12,
-          ...(noShadow
-            ? {}
-            : {
-                shadowColor: '#000',
-                shadowOpacity: 0.15,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 6 },
-                elevation: 2,
-              }),
-        },
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  );
-}
-
-function Button({
-  title,
-  onPress,
-  disabled,
-}: {
-  title: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const bg = (fg as any)?.colors?.accent || '#4ade80';
-  const text = (fg as any)?.colors?.bg || '#0d1117';
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!!disabled}
-      style={({ pressed }) => [
-        {
-          backgroundColor: bg,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 12,
-          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
-        },
-      ]}
-    >
-      <Text style={{ color: text, fontWeight: '900', fontSize: 12 }}>{title}</Text>
-    </Pressable>
-  );
-}
-
-function Input({
-  placeholder,
-  value,
-  onChangeText,
-}: {
-  placeholder?: string;
-  value: string;
-  onChangeText: (v: string) => void;
-}) {
-  const border = (fg as any)?.colors?.border || '#21262d';
-  const bg =
-    (fg as any)?.colors?.input ||
-    (fg as any)?.colors?.surface2 ||
-    '#0d1117';
-
-  return (
-    <TextInput
-      placeholder={placeholder}
-      placeholderTextColor={(fg as any)?.colors?.muted || '#7d8590'}
-      value={value}
-      onChangeText={onChangeText}
-      style={[
-        {
-          borderColor: border,
-          borderWidth: 1,
-          backgroundColor: bg,
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: Platform.OS === 'web' ? 10 : 12,
-          color: (fg as any)?.colors?.text || '#e6edf3',
-          fontWeight: '800',
-          fontSize: 13,
-        },
-      ]}
-    />
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active?: boolean;
-  onPress: () => void;
-}) {
-  const border = (fg as any)?.colors?.border || '#21262d';
-  const bg =
-    active
-      ? (fg as any)?.colors?.accent || '#4ade80'
-      : (fg as any)?.colors?.surface2 || '#161b22';
-  const text = active
-    ? (fg as any)?.colors?.bg || '#0d1117'
-    : (fg as any)?.colors?.text || '#e6edf3';
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          borderColor: border,
-          borderWidth: 1,
-          backgroundColor: bg,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
-          borderRadius: 999,
-          opacity: pressed ? 0.85 : 1,
-          marginRight: 8,
-          marginBottom: 8,
-        },
-      ]}
-    >
-      <Text style={{ color: text, fontWeight: '900', fontSize: 12 }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Badge({
-  label,
-  variant,
-}: {
-  label: string;
-  variant: 'ok' | 'warn' | 'info' | 'danger';
-}) {
-  const danger = (fg as any)?.colors?.danger || '#ef4444';
-  const accent = (fg as any)?.colors?.accent || '#22c55e';
-  const muted = (fg as any)?.colors?.muted || '#7d8590';
-  const text = (fg as any)?.colors?.text || '#e6edf3';
-
-  let border = '#21262d';
-  let bg = '#161b22';
-  let fgText = text;
-
-  if (variant === 'danger') {
-    border = danger;
-    bg = 'rgba(248,113,113,0.12)';
-    fgText = danger;
-  } else if (variant === 'ok') {
-    border = accent;
-    bg = 'rgba(74,222,128,0.12)';
-    fgText = accent;
-  } else if (variant === 'warn') {
-    border = muted;
-    bg = 'rgba(125,133,144,0.12)';
-    fgText = text;
-  } else if (variant === 'info') {
-    border = muted;
-    bg = 'rgba(125,133,144,0.08)';
-    fgText = text;
-  }
-
-  return (
-    <View
-      style={{
-        borderColor: border,
-        borderWidth: 1,
-        backgroundColor: bg,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-      }}
-    >
-      <Text style={{ color: fgText, fontWeight: '900', fontSize: 11 }}>{label}</Text>
-    </View>
-  );
-}
-
-function Divider() {
-  const border = (fg as any)?.colors?.border || '#21262d';
-  return <View style={{ height: 1, backgroundColor: border, opacity: 0.8 }} />;
-}
-
-function Centered({
-  message,
-  children,
-}: {
-  message?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <View style={{ flex: 1, padding: 20, alignItems: 'center', justifyContent: 'center' }}>
-      {children}
-      {message ? (
-        <Text style={{ marginTop: 12, color: (fg as any)?.colors?.muted || '#7d8590', fontWeight: '900' }}>
-          {message}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function Header({
-  title,
-  subtitle,
-  info,
-  right,
-}: {
-  title: string;
-  subtitle?: string;
-  info?: string;
-  right?: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={{ color: fg.colors.text, fontWeight: '900', fontSize: 18 }}>{title}</Text>
-          {subtitle ? (
-            <Text style={{ marginTop: 4, color: fg.colors.muted, fontWeight: '900', fontSize: 12 }}>
-              {subtitle}
-            </Text>
-          ) : null}
-          {info ? (
-            <Text style={{ marginTop: 6, color: fg.colors.muted, fontWeight: '800', fontSize: 11 }}>
-              {info}
-            </Text>
-          ) : null}
-        </View>
-        {right ? <View>{right}</View> : null}
-      </View>
-    </Card>
-  );
-}
-
-function ExcluirWebButton({
-  label,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  if (Platform.OS !== 'web') return null;
-
-  return (
-    <View style={styles.excluirWebWrap} pointerEvents="auto">
-      {/* @ts-ignore */}
-      <button
-        type="button"
-        disabled={!!disabled}
-        onClick={(e: any) => {
-          e?.preventDefault?.();
-          e?.stopPropagation?.();
-          onPress();
-        }}
-        style={{
-          appearance: 'none',
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          margin: 0,
-          color: disabled ? 'rgba(125,133,144,0.45)' : fg.colors.danger,
-          textDecoration: 'underline',
-          fontWeight: 800,
-          fontSize: 12,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {label}
-      </button>
-    </View>
-  );
-}
-
-/** ---------- Screen ---------- */
+type PeriodoMode = 'hoje' | 'semana' | 'mes' | 'mes_ant' | '3meses' | 'custom' | 'todos';
 
 type Prefill = {
   dataInicio?: string;
@@ -407,16 +59,271 @@ type Prefill = {
   busca?: string;
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatMoney(v?: number | null) {
+  return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function normText(v?: string | null) {
+  return (v || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
+function normEq(a?: string | null, b?: string | null) {
+  return normText(a).trim() === normText(b).trim();
+}
+
+function parseDateSafe(s?: string | null) {
+  const t = Date.parse(s || '');
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function calcPeriodo(mode: PeriodoMode): { ini: string; fim: string } {
+  const hoje = new Date();
+  const h = ymd(hoje);
+
+  if (mode === 'hoje') return { ini: h, fim: h };
+
+  if (mode === 'semana') {
+    const dow = hoje.getDay();
+    const seg = new Date(hoje); seg.setDate(hoje.getDate() - dow + (dow === 0 ? -6 : 1));
+    const dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+    return { ini: ymd(seg), fim: ymd(dom) };
+  }
+
+  if (mode === 'mes') {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    return { ini: ymd(ini), fim: ymd(fim) };
+  }
+
+  if (mode === 'mes_ant') {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    return { ini: ymd(ini), fim: ymd(fim) };
+  }
+
+  if (mode === '3meses') {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    return { ini: ymd(ini), fim: ymd(fim) };
+  }
+
+  return { ini: '', fim: '' };
+}
+
+function formatDiaLabel(data: string): string {
+  const hoje = ymd(new Date());
+  const ontem = ymd(new Date(Date.now() - 86400000));
+
+  if (data === hoje) return 'Hoje';
+  if (data === ontem) return 'Ontem';
+
+  const d = new Date(data + 'T12:00:00');
+  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const dia = d.getDate().toString().padStart(2, '0');
+  const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+  return `${dias[d.getDay()]}, ${dia}/${mes}`;
+}
+
+// ─── Componentes ──────────────────────────────────────────────────────────────
+
+function TipoIcon({ tipo }: { tipo: string }) {
+  const cfg = {
+    despesa:      { bg: fg.colors.dangerSoft, border: fg.colors.danger,  label: '−', color: fg.colors.danger  },
+    receita:      { bg: fg.colors.accentSoft, border: fg.colors.accent,  label: '+', color: fg.colors.accent  },
+    transferencia:{ bg: fg.colors.infoSoft,   border: fg.colors.info,    label: '⇄', color: fg.colors.info    },
+  }[tipo] ?? { bg: fg.colors.surface, border: fg.colors.border, label: '?', color: fg.colors.muted };
+
+  return (
+    <View style={{
+      width: 36, height: 36, borderRadius: 10, borderWidth: 1,
+      backgroundColor: cfg.bg, borderColor: cfg.border,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ color: cfg.color, fontSize: 16, fontWeight: '700' }}>{cfg.label}</Text>
+    </View>
+  );
+}
+
+function PeriodoChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: fg.radius.pill,
+        backgroundColor: active ? fg.colors.accent : fg.colors.surface,
+        borderWidth: 1,
+        borderColor: active ? fg.colors.accent : fg.colors.border,
+        marginRight: 6,
+        opacity: pressed ? 0.8 : 1,
+      })}
+    >
+      <Text style={{ fontSize: 12, fontWeight: '600', color: active ? fg.colors.onLight : fg.colors.muted }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: fg.radius.pill,
+        backgroundColor: active ? 'rgba(74,222,128,0.15)' : fg.colors.surface,
+        borderWidth: 1,
+        borderColor: active ? fg.colors.accent : fg.colors.border,
+        marginRight: 6,
+        marginBottom: 6,
+        opacity: pressed ? 0.8 : 1,
+      })}
+    >
+      <Text style={{ fontSize: 12, fontWeight: '600', color: active ? fg.colors.accent : fg.colors.muted }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ label, receita, despesa }: { label: string; receita: number; despesa: number }) {
+  const saldo = receita - despesa;
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderLabel}>{label}</Text>
+      {(receita > 0 || despesa > 0) && (
+        <Text style={[styles.sectionHeaderSaldo, { color: saldo >= 0 ? fg.colors.accent : fg.colors.danger }]}>
+          {saldo >= 0 ? '+' : ''}{formatMoney(saldo)}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function LancamentoRow({
+  item,
+  conta,
+  onPress,
+  onDelete,
+  isDeleting,
+  isViewer,
+}: {
+  item: Lancamento;
+  conta: string;
+  onPress: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+  isViewer: boolean;
+}) {
+  const tipo = item.tipo || 'despesa';
+  const vNum = Number(item.valor || 0);
+  const isPos = tipo === 'transferencia' ? vNum >= 0 : tipo === 'receita';
+  const valorColor = isPos ? fg.colors.accent : fg.colors.danger;
+  const prefixo = tipo === 'transferencia' ? (vNum === 0 ? '' : isPos ? '+' : '') : tipo === 'receita' ? '+' : '-';
+  const status = item.status || 'confirmada';
+  const isPendente = status === 'pendente';
+
+  const cat = [item.grupo, item.subgrupo].filter(Boolean).join(' › ') || conta;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDeleting}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      accessibilityLabel={`${item.descricao || 'Lançamento'}, ${formatMoney(vNum)}`}
+    >
+      <TipoIcon tipo={tipo} />
+
+      <View style={styles.rowBody}>
+        <View style={styles.rowTop}>
+          <Text style={styles.rowDesc} numberOfLines={1}>{item.descricao || '(Sem descrição)'}</Text>
+          <Text style={[styles.rowValor, { color: valorColor }]}>
+            {prefixo}{formatMoney(Math.abs(vNum))}
+          </Text>
+        </View>
+        <View style={styles.rowBottom}>
+          <Text style={styles.rowMeta} numberOfLines={1}>{cat}</Text>
+          <View style={styles.rowStatusRow}>
+            {isPendente && (
+              <View style={styles.pendenteDot} />
+            )}
+            {!isViewer && (
+              Platform.OS === 'web' ? (
+                // @ts-ignore
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={(e: any) => { e?.preventDefault?.(); e?.stopPropagation?.(); onDelete(); }}
+                  style={{
+                    appearance: 'none', background: 'none', border: 'none', padding: 0, margin: 0,
+                    color: isDeleting ? fg.colors.muted : fg.colors.danger,
+                    fontSize: 11, cursor: isDeleting ? 'not-allowed' : 'pointer', marginLeft: 8,
+                  }}
+                >
+                  {isDeleting ? '…' : 'Excluir'}
+                </button>
+              ) : (
+                <Pressable
+                  hitSlop={10}
+                  onPress={(e) => { e.stopPropagation?.(); onDelete(); }}
+                  style={{ marginLeft: 8 }}
+                >
+                  <Text style={styles.deleteText}>{isDeleting ? '…' : 'Excluir'}</Text>
+                </Pressable>
+              )
+            )}
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+const PERIODO_OPTS: Array<{ value: PeriodoMode; label: string }> = [
+  { value: 'hoje',    label: 'Hoje' },
+  { value: 'semana',  label: 'Semana' },
+  { value: 'mes',     label: 'Este mês' },
+  { value: 'mes_ant', label: 'Mês ant.' },
+  { value: '3meses',  label: '3 meses' },
+  { value: 'todos',   label: 'Todos' },
+  { value: 'custom',  label: 'Custom' },
+];
+
+const TIPOS: Array<{ value: FiltroTipo; label: string }> = [
+  { value: 'todos',         label: 'Todos' },
+  { value: 'despesa',       label: 'Despesa' },
+  { value: 'receita',       label: 'Receita' },
+  { value: 'transferencia', label: 'Transf.' },
+];
+
+const STATUS_OPTS: Array<{ value: FiltroStatus; label: string }> = [
+  { value: 'todos',      label: 'Todos' },
+  { value: 'confirmada', label: 'Confirmada' },
+  { value: 'pendente',   label: 'Pendente' },
+];
+
 export default function LancamentosScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const appliedPrefillRef = useRef(false);
-  const prefill: Prefill | null = route?.params?.prefill ? (route.params.prefill as Prefill) : null;
+  const prefill: Prefill | null = route?.params?.prefill ?? null;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [erroTela, setErroTela] = useState<string | null>(null);
 
   const [grupoAtivo, setGrupoAtivo] = useState<GrupoAtivo | null>(null);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
@@ -426,140 +333,94 @@ export default function LancamentosScreen() {
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos');
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos');
   const [filtroContaId, setFiltroContaId] = useState<string>('todos');
+  const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [filtroSubgrupo, setFiltroSubgrupo] = useState('');
 
-  const [dataInicio, setDataInicio] = useState<string>('');
-  const [dataFim, setDataFim] = useState<string>('');
+  const [periodoMode, setPeriodoMode] = useState<PeriodoMode>('mes');
+  const [customIni, setCustomIni] = useState('');
+  const [customFim, setCustomFim] = useState('');
 
-  const [filtroGrupo, setFiltroGrupo] = useState<string>('');
-  const [filtroSubgrupo, setFiltroSubgrupo] = useState<string>('');
+  const [basePeriodo, setBasePeriodo] = useState<'despesa' | 'caixa'>('despesa');
 
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [ordemData, setOrdemData] = useState<'desc' | 'asc'>('desc');
 
   const isViewer = grupoAtivo?.papel === 'viewer';
+
+  // ── Supabase ──────────────────────────────────────────────────────────────
 
   const carregarGrupoAtivo = useCallback(async (): Promise<GrupoAtivo> => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData?.user?.id) throw new Error('Usuário não autenticado.');
-    const userId = authData.user.id;
 
     const { data, error } = await supabase
       .from('grupo_membros')
-      .select(
-        `
-        grupo_id,
-        papel,
-        status,
-        grupos_financeiros (
-          id,
-          nome
-        )
-      `
-      )
-      .eq('user_id', userId)
+      .select('grupo_id, papel, status, grupos_financeiros(id, nome)')
+      .eq('user_id', authData.user.id)
       .eq('status', 'ativo')
       .order('created_at', { ascending: true })
       .limit(10);
 
-    if (error) throw new Error(`Não foi possível carregar a carteira. (${error.message})`);
-    if (!data || data.length === 0) throw new Error('Nenhuma carteira ativa encontrada.');
+    if (error) throw new Error(error.message);
+    if (!data?.length) throw new Error('Nenhuma carteira ativa encontrada.');
 
-    const primeiro = data[0] as any;
-    const nomeGrupo =
-      primeiro?.grupos_financeiros?.nome ||
-      primeiro?.grupos_financeiros?.[0]?.nome ||
-      'Minha Carteira';
-
-    return { grupo_id: primeiro.grupo_id, papel: primeiro.papel, nome_grupo: nomeGrupo };
+    const p = data[0] as any;
+    return {
+      grupo_id: p.grupo_id,
+      papel: p.papel,
+      nome_grupo: p?.grupos_financeiros?.nome || p?.grupos_financeiros?.[0]?.nome || 'Minha Carteira',
+    };
   }, []);
 
   const carregarContas = useCallback(async (grupoId: string) => {
     const { data, error } = await supabase
-      .from('contas')
-      .select('id, nome, tipo')
-      .eq('grupo_id', grupoId)
-      .order('nome', { ascending: true });
-
-    if (error) throw new Error(`Não foi possível carregar contas. (${error.message})`);
+      .from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome');
+    if (error) throw new Error(error.message);
     setContas((data || []) as Conta[]);
   }, []);
 
   const carregarLancamentos = useCallback(async (grupoId: string) => {
     const { data, error } = await supabase
       .from('transacoes')
-      .select(
-        `
-        id,
-        transferencia_id,
-        grupo_id,
-        data_caixa,
-        data_despesa,
-        conta_id,
-        descricao,
-        valor,
-        grupo,
-        subgrupo,
-        status,
-        origem,
-        tipo,
-        categoria_id,
-        eh_parcela,
-        parcela_numero,
-        total_parcelas,
-        created_at
-      `
-      )
+      .select('id,transferencia_id,grupo_id,data_caixa,data_despesa,conta_id,descricao,valor,grupo,subgrupo,status,origem,tipo,categoria_id,eh_parcela,parcela_numero,total_parcelas,created_at')
       .eq('grupo_id', grupoId)
       .order('data_despesa', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(2000);
-
-    if (error) throw new Error(`Não foi possível carregar lançamentos. (${error.message})`);
+    if (error) throw new Error(error.message);
     setLancamentos((data || []) as Lancamento[]);
   }, []);
 
   const carregarTela = useCallback(async () => {
-    setErroTela(null);
     try {
       const grupo = await carregarGrupoAtivo();
       setGrupoAtivo(grupo);
       await Promise.all([carregarContas(grupo.grupo_id), carregarLancamentos(grupo.grupo_id)]);
     } catch (e: any) {
-      console.log('ERRO LANCAMENTOS carregarTela:', e);
-      setErroTela(e?.message || 'Erro ao carregar lançamentos.');
-      setGrupoAtivo(null);
-      setContas([]);
-      setLancamentos([]);
+      console.log('ERRO LANCAMENTOS:', e);
     }
   }, [carregarGrupoAtivo, carregarContas, carregarLancamentos]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', () => carregarTela());
+    const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', carregarTela);
     return () => sub.remove();
   }, [carregarTela]);
 
   useEffect(() => {
-    let ativo = true;
+    let alive = true;
     (async () => {
       setLoading(true);
       await carregarTela();
-      if (ativo) setLoading(false);
+      if (alive) setLoading(false);
     })();
-    return () => {
-      ativo = false;
-    };
+    return () => { alive = false; };
   }, [carregarTela]);
 
   const primeiroFocoRef = useRef(true);
-  useFocusEffect(
-    useCallback(() => {
-      if (primeiroFocoRef.current) {
-        primeiroFocoRef.current = false;
-        return;
-      }
-      carregarTela();
-    }, [carregarTela])
-  );
+  useFocusEffect(useCallback(() => {
+    if (primeiroFocoRef.current) { primeiroFocoRef.current = false; return; }
+    carregarTela();
+  }, [carregarTela]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -567,497 +428,471 @@ export default function LancamentosScreen() {
     setRefreshing(false);
   }, [carregarTela]);
 
+  // ── Prefill ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!prefill || appliedPrefillRef.current) return;
+    if (prefill.filtroTipo) setFiltroTipo(prefill.filtroTipo);
+    if (prefill.filtroStatus) setFiltroStatus(prefill.filtroStatus);
+    if (prefill.filtroContaId) setFiltroContaId(prefill.filtroContaId);
+    if (prefill.filtroGrupo != null) setFiltroGrupo(String(prefill.filtroGrupo));
+    if (prefill.filtroSubgrupo != null) setFiltroSubgrupo(String(prefill.filtroSubgrupo));
+    if (prefill.busca != null) setBusca(String(prefill.busca));
+    if (prefill.dataInicio || prefill.dataFim) {
+      setPeriodoMode('custom');
+      if (prefill.dataInicio) setCustomIni(prefill.dataInicio);
+      if (prefill.dataFim) setCustomFim(prefill.dataFim);
+    }
+    appliedPrefillRef.current = true;
+  }, [prefill]);
+
+  // ── Derivados ──────────────────────────────────────────────────────────────
+
   const mapaContas = useMemo(() => {
     const m = new Map<string, Conta>();
     contas.forEach((c) => m.set(c.id, c));
     return m;
   }, [contas]);
 
-  // aplica prefill 1x
-  useEffect(() => {
-    if (!prefill || appliedPrefillRef.current) return;
+  const { dataInicio, dataFim } = useMemo(() => {
+    if (periodoMode === 'custom') return { dataInicio: customIni, dataFim: customFim };
+    if (periodoMode === 'todos') return { dataInicio: '', dataFim: '' };
+    const { ini, fim } = calcPeriodo(periodoMode);
+    return { dataInicio: ini, dataFim: fim };
+  }, [periodoMode, customIni, customFim]);
 
-    if (prefill.busca != null) setBusca(String(prefill.busca || ''));
-    if (prefill.filtroTipo) setFiltroTipo(prefill.filtroTipo);
-    if (prefill.filtroStatus) setFiltroStatus(prefill.filtroStatus);
-    if (prefill.filtroContaId) setFiltroContaId(prefill.filtroContaId);
-    if (prefill.dataInicio != null) setDataInicio(String(prefill.dataInicio || ''));
-    if (prefill.dataFim != null) setDataFim(String(prefill.dataFim || ''));
-    if (prefill.filtroGrupo != null) setFiltroGrupo(String(prefill.filtroGrupo || ''));
-    if (prefill.filtroSubgrupo != null) setFiltroSubgrupo(String(prefill.filtroSubgrupo || ''));
-
-    appliedPrefillRef.current = true;
-  }, [prefill]);
-
-  const basePeriodo = useMemo<'caixa' | 'despesa'>(() => {
-    if (filtroContaId === 'todos') return 'despesa';
-    const tipoConta = (mapaContas.get(filtroContaId)?.tipo || '').toLowerCase();
-    return tipoConta === 'cartao' ? 'caixa' : 'despesa';
-  }, [filtroContaId, mapaContas]);
-
-  const getDataFiltro = useCallback(
-    (l: Lancamento) => {
-      const dDesp = (l.data_despesa || '').slice(0, 10);
-      const dCx = (l.data_caixa || '').slice(0, 10);
-      if (basePeriodo === 'caixa') return dCx || dDesp || '';
-      return dDesp || dCx || '';
-    },
-    [basePeriodo]
-  );
+  const getDataFiltro = useCallback((l: Lancamento) => {
+    const dDesp = (l.data_despesa || '').slice(0, 10);
+    const dCx = (l.data_caixa || '').slice(0, 10);
+    return basePeriodo === 'caixa' ? (dCx || dDesp) : (dDesp || dCx);
+  }, [basePeriodo]);
 
   const lancamentosFiltrados = useMemo(() => {
     let lista = [...lancamentos];
 
-    const iniOk = dataInicio.trim() ? isValidYmd(dataInicio.trim()) : true;
-    const fimOk = dataFim.trim() ? isValidYmd(dataFim.trim()) : true;
+    if (dataInicio) lista = lista.filter((l) => { const d = getDataFiltro(l); return d ? d >= dataInicio : false; });
+    if (dataFim)    lista = lista.filter((l) => { const d = getDataFiltro(l); return d ? d <= dataFim : false; });
 
-    if (iniOk && dataInicio.trim()) {
-      const ini = dataInicio.trim();
-      lista = lista.filter((l) => {
-        const d = getDataFiltro(l);
-        return d ? d >= ini : false;
-      });
-    }
-
-    if (fimOk && dataFim.trim()) {
-      const fim = dataFim.trim();
-      lista = lista.filter((l) => {
-        const d = getDataFiltro(l);
-        return d ? d <= fim : false;
-      });
-    }
-
-    if (filtroTipo !== 'todos') lista = lista.filter((l) => l.tipo === filtroTipo);
-    if (filtroStatus !== 'todos') lista = lista.filter((l) => (l.status || 'confirmada') === filtroStatus);
-    if (filtroContaId !== 'todos') lista = lista.filter((l) => l.conta_id === filtroContaId);
-
-    if (filtroGrupo.trim()) {
-      const g = filtroGrupo.trim();
-      lista = lista.filter((l) => normEq(l.grupo, g));
-    }
-
-    if (filtroSubgrupo.trim()) {
-      const s = filtroSubgrupo.trim();
-      lista = lista.filter((l) => normEq(l.subgrupo, s));
-    }
+    if (filtroTipo !== 'todos')     lista = lista.filter((l) => l.tipo === filtroTipo);
+    if (filtroStatus !== 'todos')   lista = lista.filter((l) => (l.status || 'confirmada') === filtroStatus);
+    if (filtroContaId !== 'todos')  lista = lista.filter((l) => l.conta_id === filtroContaId);
+    if (filtroGrupo.trim())         lista = lista.filter((l) => normEq(l.grupo, filtroGrupo));
+    if (filtroSubgrupo.trim())      lista = lista.filter((l) => normEq(l.subgrupo, filtroSubgrupo));
 
     if (busca.trim()) {
-      const termo = normalizaTexto(busca.trim());
+      const termo = normText(busca.trim());
       lista = lista.filter((l) => {
-        const contaNome = l.conta_id ? mapaContas.get(l.conta_id)?.nome || '' : '';
-        const alvo = [l.descricao || '', l.grupo || '', l.subgrupo || '', l.tipo || '', l.status || '', contaNome]
-          .map(normalizaTexto)
-          .join(' | ');
-        return alvo.includes(termo);
+        const conta = l.conta_id ? mapaContas.get(l.conta_id)?.nome || '' : '';
+        return [l.descricao, l.grupo, l.subgrupo, l.tipo, l.status, conta]
+          .map(normText).join(' ').includes(termo);
       });
     }
 
-    return lista.sort((a, b) => {
-      const d1 = parseDateSafe(a.data_despesa || a.created_at);
-      const d2 = parseDateSafe(b.data_despesa || b.created_at);
-      return ordemData === 'desc' ? d2 - d1 : d1 - d2;
-    });
-  }, [
-    lancamentos,
-    dataInicio,
-    dataFim,
-    filtroTipo,
-    filtroStatus,
-    filtroContaId,
-    filtroGrupo,
-    filtroSubgrupo,
-    busca,
-    mapaContas,
-    getDataFiltro,
-    ordemData,
-  ]);
+    return lista.sort((a, b) =>
+      parseDateSafe(b.data_despesa || b.created_at) - parseDateSafe(a.data_despesa || a.created_at)
+    );
+  }, [lancamentos, dataInicio, dataFim, filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, busca, mapaContas, getDataFiltro]);
 
-  const resumoPeriodo = useMemo(() => {
-    const incluirTransfer = filtroContaId !== 'todos';
-    let receita = 0, despesa = 0, transferencia = 0;
-
+  const grupos = useMemo(() => {
+    const map = new Map<string, { items: Lancamento[]; receita: number; despesa: number }>();
     for (const l of lancamentosFiltrados) {
-      const raw = Number(l.valor || 0);
-      const t = String(l.tipo || '').toLowerCase();
-      if (t === 'receita') receita += Math.abs(raw);
-      else if (t === 'despesa') despesa += Math.abs(raw);
-      else if (t === 'transferencia' && incluirTransfer) transferencia += raw;
+      const data = getDataFiltro(l) || (l.created_at || '').slice(0, 10) || 'sem-data';
+      const prev = map.get(data) || { items: [], receita: 0, despesa: 0 };
+      const v = Math.abs(Number(l.valor || 0));
+      if (l.tipo === 'receita') prev.receita += v;
+      else if (l.tipo === 'despesa') prev.despesa += v;
+      prev.items.push(l);
+      map.set(data, prev);
     }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([data, val]) => ({ data, label: formatDiaLabel(data), ...val }));
+  }, [lancamentosFiltrados, getDataFiltro]);
 
-    return { receita, despesa, saldo: receita - despesa + transferencia, n: lancamentosFiltrados.length };
-  }, [lancamentosFiltrados, filtroContaId]);
-
-  const abrirNovo = () => navigation.navigate('NovoLancamento');
-  const abrirEdicao = (item: Lancamento) => navigation.navigate('EditarLancamento', { id: item.id });
-
-  const executarExclusao = async (item: Lancamento) => {
-    const key = item.transferencia_id || item.id;
-
-    try {
-      if (!grupoAtivo?.grupo_id) throw new Error('Carteira não carregada.');
-      setDeletingKey(key);
-
-      if (item.transferencia_id) {
-        const { error } = await supabase.rpc('excluir_transferencia', {
-          p_transferencia_id: item.transferencia_id,
-        });
-        if (error) throw error;
-
-        setLancamentos((prev) => prev.filter((x) => x.transferencia_id !== item.transferencia_id));
-      } else {
-        const { error } = await supabase
-          .from('transacoes')
-          .delete()
-          .eq('id', item.id)
-          .eq('grupo_id', grupoAtivo.grupo_id);
-
-        if (error) throw error;
-        setLancamentos((prev) => prev.filter((x) => x.id !== item.id));
-      }
-
-      if (Platform.OS === 'web') window.alert('Lançamento excluído.');
-    } catch (e: any) {
-      console.log('ERRO LANCAMENTOS excluir:', e);
-      if (Platform.OS === 'web') window.alert(e?.message || 'Não foi possível excluir o lançamento.');
-      else Alert.alert('Erro', e?.message || 'Não foi possível excluir o lançamento.');
-    } finally {
-      setDeletingKey(null);
+  const resumo = useMemo(() => {
+    let receita = 0, despesa = 0;
+    for (const l of lancamentosFiltrados) {
+      const v = Math.abs(Number(l.valor || 0));
+      if (l.tipo === 'receita') receita += v;
+      else if (l.tipo === 'despesa') despesa += v;
     }
-  };
+    return { receita, despesa, saldo: receita - despesa, n: lancamentosFiltrados.length };
+  }, [lancamentosFiltrados]);
 
-  const confirmarEExcluir = (item: Lancamento) => {
-    if (isViewer) {
-      if (Platform.OS === 'web') window.alert('Sem permissão: seu perfil é de visualização.');
-      else Alert.alert('Sem permissão', 'Seu perfil é de visualização.');
-      return;
-    }
+  const filtrosAtivos = useMemo(() => {
+    let n = 0;
+    if (filtroTipo !== 'todos') n++;
+    if (filtroStatus !== 'todos') n++;
+    if (filtroContaId !== 'todos') n++;
+    if (filtroGrupo.trim()) n++;
+    if (filtroSubgrupo.trim()) n++;
+    if (basePeriodo !== 'despesa') n++;
+    return n;
+  }, [filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, basePeriodo]);
 
-    const isTransf = item.tipo === 'transferencia' && !!item.transferencia_id;
-    const msg = isTransf
-      ? `Deseja excluir esta transferência "${item.descricao || 'Sem descrição'}" (${formatMoney(item.valor)})? Isso apagará os 2 lados.`
-      : `Deseja excluir "${item.descricao || 'Sem descrição'}" (${formatMoney(item.valor)})?`;
+  // ── Ações ──────────────────────────────────────────────────────────────────
 
-    if (Platform.OS === 'web') {
-      const ok = window.confirm(msg);
-      if (!ok) return;
-      executarExclusao(item);
-      return;
-    }
-
-    const key = item.transferencia_id || item.id;
-    Alert.alert('Excluir lançamento', msg, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: deletingKey === key ? 'Excluindo...' : 'Excluir',
-        style: 'destructive',
-        onPress: () => executarExclusao(item),
-      },
-    ]);
-  };
-
-  const limparTudo = () => {
-    setDataInicio('');
-    setDataFim('');
+  const limparFiltros = () => {
     setFiltroTipo('todos');
     setFiltroStatus('todos');
     setFiltroContaId('todos');
     setFiltroGrupo('');
     setFiltroSubgrupo('');
     setBusca('');
+    setPeriodoMode('mes');
+    setCustomIni('');
+    setCustomFim('');
+    setBasePeriodo('despesa');
   };
+
+  const executarExclusao = async (item: Lancamento) => {
+    const key = item.transferencia_id || item.id;
+    try {
+      if (!grupoAtivo?.grupo_id) throw new Error('Carteira não carregada.');
+      setDeletingKey(key);
+      if (item.transferencia_id) {
+        const { error } = await supabase.rpc('excluir_transferencia', { p_transferencia_id: item.transferencia_id });
+        if (error) throw error;
+        setLancamentos((prev) => prev.filter((x) => x.transferencia_id !== item.transferencia_id));
+      } else {
+        const { error } = await supabase.from('transacoes').delete().eq('id', item.id).eq('grupo_id', grupoAtivo.grupo_id);
+        if (error) throw error;
+        setLancamentos((prev) => prev.filter((x) => x.id !== item.id));
+      }
+      DeviceEventEmitter.emit('FG_REFRESH_ALL');
+    } catch (e: any) {
+      const msg = e?.message || 'Não foi possível excluir.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Erro', msg);
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
+  const confirmarExclusao = (item: Lancamento) => {
+    if (isViewer) {
+      const msg = 'Sem permissão: perfil de visualização.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Sem permissão', msg);
+      return;
+    }
+    const isTransf = item.tipo === 'transferencia' && !!item.transferencia_id;
+    const msg = isTransf
+      ? `Excluir transferência "${item.descricao || 'Sem descrição'}"? Apagará os 2 lados.`
+      : `Excluir "${item.descricao || 'Sem descrição'}" (${formatMoney(item.valor)})?`;
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) executarExclusao(item);
+    } else {
+      Alert.alert('Excluir', msg, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir', style: 'destructive', onPress: () => executarExclusao(item) },
+      ]);
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <Centered message="Carregando lançamentos...">
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={fg.colors.accent} />
-      </Centered>
+        <Text style={styles.centeredText}>Carregando lançamentos...</Text>
+      </View>
     );
   }
 
-  const periodoTxt =
-    (dataInicio?.trim() ? dataInicio.trim() : '...') + ' → ' + (dataFim?.trim() ? dataFim.trim() : '...');
-
-  const contaSelNome =
-    filtroContaId === 'todos' ? 'Todas' : (mapaContas.get(filtroContaId)?.nome || 'Conta');
-
-  const hintSaldo =
-    filtroContaId === 'todos'
-      ? 'Saldo do filtro (transferências ignoradas).'
-      : `Saldo do filtro na conta "${contaSelNome}" (transferências incluídas).`;
-
-  const hintPeriodo =
-    filtroContaId !== 'todos' && (mapaContas.get(filtroContaId)?.tipo || '').toLowerCase() === 'cartao'
-      ? 'Cartão: período filtra por Data de Caixa.'
-      : 'Período filtra por Data da Despesa.';
-
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: (fg as any)?.colors?.bg || '#0d1117' }}
-      contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={fg.colors.accent} />}
-    >
-      <Header
-        title="Lançamentos"
-        subtitle={grupoAtivo?.nome_grupo || 'Minha Carteira'}
-        info={`Perfil: ${isViewer ? 'Viewer' : 'Owner'} • ${lancamentosFiltrados.length} item(ns) no filtro • Período: ${periodoTxt}`}
-        right={!isViewer ? <Button title="+ Novo" onPress={abrirNovo} /> : undefined}
-      />
-
-      <View style={{ height: 10 }} />
-
-      <Card>
-        <Input placeholder="Buscar por descrição, grupo, subgrupo, conta..." value={busca} onChangeText={setBusca} />
-      </Card>
-
-      <View style={{ height: 10 }} />
-
-      <Card>
-        <Text style={styles.filterLabel}>Período (inicial e final)</Text>
-
-        <View style={{ flexDirection: 'row' }}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Input placeholder="Data inicial (YYYY-MM-DD)" value={dataInicio} onChangeText={setDataInicio} />
+    <View style={{ flex: 1, backgroundColor: fg.colors.bg }}>
+      <ScrollView
+        contentContainerStyle={[styles.container, isDesktop && { paddingHorizontal: 28, paddingTop: 28, alignItems: 'center' }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={fg.colors.accent} />}
+      >
+      <View style={{ width: '100%', maxWidth: isDesktop ? 960 : undefined, alignSelf: isDesktop ? 'center' : undefined }}>
+        {/* ── Cabeçalho ─────────────────────────────────────────── */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.screenTitle}>Lançamentos</Text>
+            <Text style={styles.screenSub}>{grupoAtivo?.nome_grupo || 'Minha Carteira'}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Input placeholder="Data final (YYYY-MM-DD)" value={dataFim} onChangeText={setDataFim} />
+          <View style={styles.resumoMini}>
+            <Text style={[styles.resumoVal, { color: fg.colors.accent }]}>+{formatMoney(resumo.receita)}</Text>
+            <Text style={[styles.resumoVal, { color: fg.colors.danger }]}>−{formatMoney(resumo.despesa)}</Text>
           </View>
         </View>
 
-        <View style={{ height: 8 }} />
-        <Text style={styles.periodHint}>{hintPeriodo}</Text>
+        {/* ── Busca ─────────────────────────────────────────────── */}
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar descrição, categoria, conta..."
+            placeholderTextColor={fg.colors.muted}
+            value={busca}
+            onChangeText={setBusca}
+          />
+          {busca.length > 0 && (
+            <Pressable onPress={() => setBusca('')} hitSlop={8}>
+              <Text style={{ color: fg.colors.muted, fontSize: 16 }}>×</Text>
+            </Pressable>
+          )}
+        </View>
 
-        {(filtroGrupo.trim() || filtroSubgrupo.trim()) ? (
-          <>
-            <View style={{ height: 10 }} />
-            <Text style={styles.filterLabel}>Categoria (drill)</Text>
-            <View style={styles.filterRow}>
-              {filtroGrupo.trim() ? <Chip label={`Grupo: ${filtroGrupo.trim()}`} active onPress={() => {}} /> : null}
-              {filtroSubgrupo.trim() ? <Chip label={`Sub: ${filtroSubgrupo.trim()}`} active onPress={() => {}} /> : null}
-            </View>
-          </>
-        ) : null}
-
-        <View style={{ height: 10 }} />
-        <Chip label="Limpar todos os filtros" active={false} onPress={limparTudo} />
-
-        <View style={{ height: 10 }} />
-
-        <Text style={styles.filterLabel}>Tipo</Text>
-        <View style={styles.filterRow}>
-          {TIPOS.map((t) => (
-            <Chip
-              key={t.value}
-              label={t.label}
-              active={filtroTipo === t.value}
-              onPress={() => setFiltroTipo(t.value)}
+        {/* ── Período shortcuts ─────────────────────────────────── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodoRow} contentContainerStyle={{ paddingRight: 20 }}>
+          {PERIODO_OPTS.map((p) => (
+            <PeriodoChip
+              key={p.value}
+              label={p.label}
+              active={periodoMode === p.value}
+              onPress={() => setPeriodoMode(p.value)}
             />
           ))}
-        </View>
+        </ScrollView>
 
-        <View style={{ height: 10 }} />
-
-        <Text style={styles.filterLabel}>Status</Text>
-        <View style={styles.filterRow}>
-          {STATUS_OPTS.map((s) => (
-            <Chip
-              key={s.value}
-              label={s.label}
-              active={filtroStatus === s.value}
-              onPress={() => setFiltroStatus(s.value)}
+        {/* Custom date inputs */}
+        {periodoMode === 'custom' && (
+          <View style={styles.customDates}>
+            <TextInput
+              style={styles.dateInput}
+              placeholder="Início (AAAA-MM-DD)"
+              placeholderTextColor={fg.colors.muted}
+              value={customIni}
+              onChangeText={setCustomIni}
+              keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
             />
-          ))}
-        </View>
-
-        <View style={{ height: 10 }} />
-
-        <Text style={styles.filterLabel}>Conta</Text>
-        <View style={styles.filterRow}>
-          <Chip label="Todas" active={filtroContaId === 'todos'} onPress={() => setFiltroContaId('todos')} />
-          {contas.slice(0, 20).map((c) => (
-            <Chip key={c.id} label={c.nome} active={filtroContaId === c.id} onPress={() => setFiltroContaId(c.id)} />
-          ))}
-        </View>
-      </Card>
-
-      <View style={{ height: 10 }} />
-
-      <Card noShadow>
-        <Text style={styles.summaryLabel}>Resumo do filtro • {resumoPeriodo.n} lançamento(s)</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(74,222,128,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(74,222,128,0.25)' }}>
-            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>RECEITAS</Text>
-            <Text style={{ color: fg.colors.accent, fontWeight: '900', fontSize: 13 }}>+{formatMoney(resumoPeriodo.receita)}</Text>
+            <Text style={{ color: fg.colors.muted, marginHorizontal: 8 }}>→</Text>
+            <TextInput
+              style={styles.dateInput}
+              placeholder="Fim (AAAA-MM-DD)"
+              placeholderTextColor={fg.colors.muted}
+              value={customFim}
+              onChangeText={setCustomFim}
+              keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
+            />
           </View>
-          <View style={{ flex: 1, backgroundColor: 'rgba(248,113,113,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.25)' }}>
-            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>DESPESAS</Text>
-            <Text style={{ color: fg.colors.danger, fontWeight: '900', fontSize: 13 }}>-{formatMoney(resumoPeriodo.despesa)}</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: resumoPeriodo.saldo >= 0 ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: resumoPeriodo.saldo >= 0 ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)' }}>
-            <Text style={{ color: fg.colors.muted, fontSize: 10, fontWeight: '900', marginBottom: 4 }}>SALDO</Text>
-            <Text style={{ color: resumoPeriodo.saldo >= 0 ? fg.colors.accent : fg.colors.danger, fontWeight: '900', fontSize: 13 }}>
-              {resumoPeriodo.saldo >= 0 ? '+' : '-'}{formatMoney(Math.abs(resumoPeriodo.saldo))}
+        )}
+
+        {/* ── Barra de filtros ──────────────────────────────────── */}
+        <View style={styles.filtroBar}>
+          <Pressable
+            onPress={() => setFiltrosAbertos((v) => !v)}
+            style={({ pressed }) => [styles.filtroBtn, pressed && { opacity: 0.75 }]}
+          >
+            <Text style={styles.filtroBtnText}>
+              {filtrosAbertos ? 'Fechar filtros' : 'Filtros'}
             </Text>
-          </View>
-        </View>
-        <Text style={[styles.summaryHint, { marginTop: 8 }]}>{hintSaldo}</Text>
-      </Card>
-
-      <View style={{ height: 10 }} />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={() => setOrdemData((o) => (o === 'desc' ? 'asc' : 'desc'))}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: (fg as any)?.colors?.surface || '#161b22',
-            borderColor: (fg as any)?.colors?.border || '#21262d',
-            borderWidth: 1,
-            borderRadius: 999,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            opacity: pressed ? 0.75 : 1,
-          })}
-          accessibilityLabel={ordemData === 'desc' ? 'Ordenar por data crescente' : 'Ordenar por data decrescente'}
-        >
-          <Text style={{ color: (fg as any)?.colors?.muted || '#7d8590', fontSize: 12, fontWeight: '900' }}>
-            Data {ordemData === 'desc' ? '↓ Mais recente' : '↑ Mais antigo'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={{ height: 8 }} />
-
-      {lancamentosFiltrados.length === 0 ? (
-        <Card>
-          <Text style={styles.emptyText}>Nenhum lançamento encontrado no filtro atual.</Text>
-        </Card>
-      ) : (
-        <Card style={{ padding: 0 }}>
-          {lancamentosFiltrados.map((item, idx) => {
-            const conta = item.conta_id ? mapaContas.get(item.conta_id) : null;
-            const tipo = item.tipo || 'despesa';
-            const status = (item.status || 'confirmada') as 'confirmada' | 'pendente';
-            const dataRef = (item.data_despesa || item.data_caixa || '-').slice(0, 10);
-
-            const key = item.transferencia_id || item.id;
-            const isDeletingThis = deletingKey === key;
-
-            const badgeTipo = tipo === 'receita' ? 'ok' : tipo === 'transferencia' ? 'info' : 'danger';
-
-            const vNum = Number(item.valor || 0);
-            const isPos = vNum >= 0;
-            const valorStyle =
-              tipo === 'transferencia' ? (isPos ? styles.pos : styles.neg) : tipo === 'receita' ? styles.pos : styles.neg;
-
-            const prefixo =
-              tipo === 'transferencia' ? (vNum === 0 ? '' : isPos ? '+' : '-') : tipo === 'receita' ? '+' : '-';
-
-            return (
-              <View key={item.id} style={styles.rowWrap}>
-                <Pressable
-                  onPress={() => abrirEdicao(item)}
-                  disabled={!!deletingKey}
-                  style={({ pressed }) => [styles.listItem, pressed ? styles.listItemPressed : null]}
-                >
-                  <View style={styles.itemTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemDescricao} numberOfLines={1}>
-                        {item.descricao || '(Sem descrição)'}
-                      </Text>
-                      <Text style={styles.itemMeta} numberOfLines={1}>
-                        {item.grupo || '-'} • {item.subgrupo || '-'}
-                      </Text>
-                      <Text style={styles.itemMeta} numberOfLines={1}>
-                        {conta?.nome || 'Conta não encontrada'} • {dataRef}
-                      </Text>
-                      {tipo === 'transferencia' && item.transferencia_id ? (
-                        <Text style={styles.itemMeta} numberOfLines={1}>
-                          Transferência: {item.transferencia_id.slice(0, 8)}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Badge label={tipo.toUpperCase()} variant={badgeTipo as any} />
-                      <Text style={[styles.itemValor, { marginTop: 8 }, valorStyle]}>
-                        {prefixo}
-                        {formatMoney(Math.abs(vNum))}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.itemBottom}>
-                    <Badge
-                      label={status === 'confirmada' ? 'Confirmada' : 'Pendente'}
-                      variant={status === 'confirmada' ? 'ok' : 'warn'}
-                    />
-
-                    {!isViewer && Platform.OS !== 'web' ? (
-                      <Pressable
-                        hitSlop={12}
-                        onPress={() => {
-                          if (isDeletingThis) return;
-                          confirmarEExcluir(item);
-                        }}
-                      >
-                        <Text style={[styles.actionText, styles.actionDanger]}>
-                          {isDeletingThis ? 'Excluindo...' : 'Excluir'}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </Pressable>
-
-                {!isViewer ? (
-                  <ExcluirWebButton
-                    label={isDeletingThis ? 'Excluindo...' : 'Excluir'}
-                    disabled={!!deletingKey}
-                    onPress={() => {
-                      if (isDeletingThis) return;
-                      confirmarEExcluir(item);
-                    }}
-                  />
-                ) : null}
-
-                {idx < lancamentosFiltrados.length - 1 ? <Divider /> : null}
+            {filtrosAtivos > 0 && (
+              <View style={styles.filtroBadge}>
+                <Text style={styles.filtroBadgeText}>{filtrosAtivos}</Text>
               </View>
-            );
-          })}
-        </Card>
+            )}
+          </Pressable>
+
+          <Text style={styles.countLabel}>{resumo.n} lançamento{resumo.n !== 1 ? 's' : ''}</Text>
+
+          {(filtrosAtivos > 0 || busca || periodoMode !== 'mes') && (
+            <Pressable onPress={limparFiltros} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+              <Text style={styles.limparText}>Limpar</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Filtros colapsáveis */}
+        {filtrosAbertos && (
+          <View style={styles.filtroPanel}>
+            <Text style={styles.filtroLabel}>BASE DO PERÍODO</Text>
+            <View style={styles.chipRow}>
+              <FiltroChip
+                label="Data despesa"
+                active={basePeriodo === 'despesa'}
+                onPress={() => setBasePeriodo('despesa')}
+              />
+              <FiltroChip
+                label="Data caixa"
+                active={basePeriodo === 'caixa'}
+                onPress={() => setBasePeriodo('caixa')}
+              />
+            </View>
+
+            <Text style={[styles.filtroLabel, { marginTop: 10 }]}>TIPO</Text>
+            <View style={styles.chipRow}>
+              {TIPOS.map((t) => (
+                <FiltroChip key={t.value} label={t.label} active={filtroTipo === t.value} onPress={() => setFiltroTipo(t.value)} />
+              ))}
+            </View>
+
+            <Text style={[styles.filtroLabel, { marginTop: 10 }]}>STATUS</Text>
+            <View style={styles.chipRow}>
+              {STATUS_OPTS.map((s) => (
+                <FiltroChip key={s.value} label={s.label} active={filtroStatus === s.value} onPress={() => setFiltroStatus(s.value)} />
+              ))}
+            </View>
+
+            <Text style={[styles.filtroLabel, { marginTop: 10 }]}>CONTA</Text>
+            <View style={styles.chipRow}>
+              <FiltroChip label="Todas" active={filtroContaId === 'todos'} onPress={() => setFiltroContaId('todos')} />
+              {contas.slice(0, 20).map((c) => (
+                <FiltroChip key={c.id} label={c.nome} active={filtroContaId === c.id} onPress={() => setFiltroContaId(c.id)} />
+              ))}
+            </View>
+
+            {(filtroGrupo.trim() || filtroSubgrupo.trim()) && (
+              <>
+                <Text style={[styles.filtroLabel, { marginTop: 10 }]}>CATEGORIA (DRILL)</Text>
+                <View style={styles.chipRow}>
+                  {filtroGrupo.trim() && <FiltroChip label={`${filtroGrupo}`} active onPress={() => setFiltroGrupo('')} />}
+                  {filtroSubgrupo.trim() && <FiltroChip label={`${filtroSubgrupo}`} active onPress={() => setFiltroSubgrupo('')} />}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* ── Lista agrupada ────────────────────────────────────── */}
+        {grupos.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📭</Text>
+            <Text style={styles.emptyTitle}>Nenhum lançamento</Text>
+            <Text style={styles.emptyDesc}>Ajuste os filtros ou adicione um novo lançamento.</Text>
+          </View>
+        ) : (
+          grupos.map((grupo) => (
+            <View key={grupo.data}>
+              <SectionHeader label={grupo.label} receita={grupo.receita} despesa={grupo.despesa} />
+              <View style={styles.card}>
+                {grupo.items.map((item, idx) => {
+                  const conta = item.conta_id ? (mapaContas.get(item.conta_id)?.nome || 'Conta') : 'Conta';
+                  const key = item.transferencia_id || item.id;
+                  return (
+                    <View key={item.id}>
+                      <LancamentoRow
+                        item={item}
+                        conta={conta}
+                        onPress={() => navigation.navigate('EditarLancamento', { id: item.id })}
+                        onDelete={() => { if (!deletingKey) confirmarExclusao(item); }}
+                        isDeleting={deletingKey === key}
+                        isViewer={isViewer}
+                      />
+                      {idx < grupo.items.length - 1 && <View style={styles.divider} />}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))
+        )}
+
+        <View style={{ height: 80 }} />
+        </View>{/* /maxWidth wrapper */}
+      </ScrollView>
+
+      {/* ── FAB ───────────────────────────────────────────────── */}
+      {!isViewer && (
+        <Pressable
+          onPress={() => navigation.navigate('NovoLancamento')}
+          style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }]}
+          accessibilityLabel="Novo lançamento"
+        >
+          <Text style={styles.fabLabel}>+</Text>
+        </Pressable>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  filterLabel: { color: fg.colors.muted, ...(fg as any)?.typography?.label, marginBottom: 6 },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  container: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 },
+  centered: { flex: 1, backgroundColor: fg.colors.bg, alignItems: 'center', justifyContent: 'center' },
+  centeredText: { marginTop: 12, color: fg.colors.muted, fontWeight: '500' },
 
-  periodHint: { color: fg.colors.muted, fontSize: 11, fontWeight: '800' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  screenTitle: { color: fg.colors.text, fontSize: 20, fontWeight: '600' },
+  screenSub: { color: fg.colors.muted, fontSize: 12, marginTop: 2 },
+  resumoMini: { alignItems: 'flex-end', gap: 2 },
+  resumoVal: { fontSize: 12, fontWeight: '700' },
 
-  summaryLabel: { color: fg.colors.muted, fontSize: 11, fontWeight: '900', marginBottom: 6 },
-  summaryValue: { color: fg.colors.text, fontSize: 16, fontWeight: '900' },
-  summaryHint: { marginTop: 6, color: fg.colors.muted, fontSize: 11, fontWeight: '800' },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10,
+  },
+  searchIcon: { fontSize: 14, marginRight: 8 },
+  searchInput: { flex: 1, color: fg.colors.text, fontSize: 13, fontWeight: '400' },
 
-  pos: { color: fg.colors.accent },
-  neg: { color: fg.colors.danger },
+  periodoRow: { marginBottom: 8 },
 
-  emptyText: { color: fg.colors.muted, ...(fg as any)?.typography?.body },
+  customDates: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  dateInput: {
+    flex: 1, backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, paddingHorizontal: 10, paddingVertical: 8,
+    color: fg.colors.text, fontSize: 12,
+  },
 
-  rowWrap: { position: 'relative' },
-  listItem: { paddingHorizontal: 12, paddingVertical: 12 },
-  listItemPressed: { backgroundColor: 'rgba(74,222,128,0.06)' },
+  filtroBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
+  filtroBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  filtroBtnText: { color: fg.colors.text, fontSize: 13, fontWeight: '500' },
+  filtroBadge: {
+    backgroundColor: fg.colors.accent, borderRadius: 10, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  filtroBadgeText: { color: fg.colors.onLight, fontSize: 11, fontWeight: '700' },
+  countLabel: { flex: 1, color: fg.colors.muted, fontSize: 12 },
+  limparText: { color: fg.colors.accent, fontSize: 12, fontWeight: '600' },
 
-  itemTop: { flexDirection: 'row', justifyContent: 'space-between' },
-  itemDescricao: { color: fg.colors.text, fontWeight: '900', fontSize: 14 },
-  itemMeta: { marginTop: 2, color: fg.colors.muted, fontSize: 12, fontWeight: '800' },
-  itemValor: { fontWeight: '900', fontSize: 13 },
+  filtroPanel: {
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, padding: 12, marginBottom: 10,
+  },
+  filtroLabel: { color: fg.colors.muted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 6 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
 
-  itemBottom: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, paddingHorizontal: 2, marginTop: 6,
+  },
+  sectionHeaderLabel: { color: fg.colors.muted, fontSize: 12, fontWeight: '600' },
+  sectionHeaderSaldo: { fontSize: 12, fontWeight: '700' },
 
-  actionText: { color: fg.colors.muted, fontSize: 12, fontWeight: '800' },
-  actionDanger: { color: fg.colors.danger, textDecorationLine: 'underline' },
+  card: {
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, overflow: 'hidden', marginBottom: 4,
+  },
 
-  excluirWebWrap: { position: 'absolute', right: 12, bottom: 12, zIndex: 9999 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  rowPressed: { backgroundColor: 'rgba(74,222,128,0.05)' },
+  rowBody: { flex: 1 },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  rowDesc: { flex: 1, color: fg.colors.text, fontSize: 14, fontWeight: '500' },
+  rowValor: { fontSize: 14, fontWeight: '700' },
+  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 },
+  rowMeta: { flex: 1, color: fg.colors.muted, fontSize: 12 },
+  rowStatusRow: { flexDirection: 'row', alignItems: 'center' },
+  pendenteDot: {
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: '#f6c453', marginRight: 4,
+  },
+  deleteText: { color: fg.colors.danger, fontSize: 11, fontWeight: '500' },
+
+  divider: { height: 1, backgroundColor: fg.colors.border, marginLeft: 58 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 48 },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  emptyTitle: { color: fg.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  emptyDesc: { color: fg.colors.muted, fontSize: 13, textAlign: 'center' },
+
+  fab: {
+    position: 'absolute', bottom: 24, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: fg.colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: fg.colors.accent, shadowOpacity: 0.4,
+    shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  fabLabel: { color: fg.colors.onLight, fontSize: 28, fontWeight: '400', lineHeight: 32 },
 });

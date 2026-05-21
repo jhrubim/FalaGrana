@@ -158,7 +158,7 @@ export const FiltroLinhas = {
     'emissao',
 
     'continua...',
-    'verso',
+    ' verso',
     'pagina',
     'página',
     'data mov.',
@@ -234,10 +234,33 @@ export const FiltroLinhas = {
   },
 };
 
+const MESES_PT_BR: Record<string, string> = {
+  jan: '01', fev: '02', mar: '03', abr: '04',
+  mai: '05', jun: '06', jul: '07', ago: '08',
+  set: '09', out: '10', nov: '11', dez: '12',
+};
+
+/** "18 fev." ou "18 fev" → "2025-02-18" (infere o ano pelo contexto recente) */
+export function parseDatePtBrAbrev(str: string): string | null {
+  const m = /^(\d{1,2})\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?$/i.exec(str.trim());
+  if (!m) return null;
+  const dia = m[1].padStart(2, '0');
+  const mesStr = m[2].toLowerCase();
+  const mesNum = parseInt(MESES_PT_BR[mesStr], 10);
+  const hoje = new Date();
+  // se o mês for maior que o atual → assume ano anterior (ex: dez. quando estamos em maio)
+  const ano = mesNum > hoje.getMonth() + 1 ? hoje.getFullYear() - 1 : hoje.getFullYear();
+  return `${ano}-${MESES_PT_BR[mesStr]}-${dia}`;
+}
+
 function converterData(dataStr: string) {
   if (!dataStr) return new Date().toISOString().split('T')[0];
 
   const str = String(dataStr).trim();
+
+  // "DD mês." — formato PT-BR de extratos de cartão
+  const ptBr = parseDatePtBrAbrev(str);
+  if (ptBr) return ptBr;
 
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
     const [dia, mes, ano] = str.split('/');
@@ -403,6 +426,69 @@ function parseCSV(texto: string): TransacaoImportada[] {
   return transacoes;
 }
 
+/** Parser para extratos de cartão com datas "DD mês." em PT-BR (Nubank, Itaú, C6, etc.) */
+function parseCartaoPtBr(texto: string): TransacaoImportada[] {
+  const transacoes: TransacaoImportada[] = [];
+  const linhas = texto.split('\n');
+
+  for (const linhaOriginal of linhas) {
+    const linha = linhaOriginal.trim();
+    if (!linha) continue;
+
+    let dataISO: string | null = null;
+    let descricao = '';
+    let valorStr = '';
+
+    // ── TSV: "DD mês.\tdescrição\tvalor" ────────────────────────────────────
+    if (linha.includes('\t')) {
+      const partes = linha.split('\t').map((p) => p.trim()).filter(Boolean);
+      if (partes.length >= 3) {
+        dataISO = parseDatePtBrAbrev(partes[0]);
+        if (!dataISO) continue;
+        valorStr = partes[partes.length - 1];
+        descricao = partes.slice(1, -1).join(' ').trim();
+      }
+    }
+
+    // ── Espaços: "DD mês.  descrição  valor" ────────────────────────────────
+    if (!dataISO) {
+      const m = /^(\d{1,2}\s+(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?)\s{2,}(.+?)\s{2,}([\d.,]+)\s*$/i.exec(linha);
+      if (m) {
+        dataISO = parseDatePtBrAbrev(m[1]);
+        if (!dataISO) continue;
+        descricao = m[2].trim();
+        valorStr = m[3];
+      }
+    }
+
+    // ── Fallback: "DD mês. descrição valor" (1 espaço) ─────────────────────
+    if (!dataISO) {
+      const m = /^(\d{1,2}\s+(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?)\s+(.+?)\s+([\d.,]+)\s*$/i.exec(linha);
+      if (m) {
+        dataISO = parseDatePtBrAbrev(m[1]);
+        if (!dataISO) continue;
+        descricao = m[2].trim();
+        valorStr = m[3];
+      }
+    }
+
+    if (!dataISO || !descricao || !valorStr) continue;
+
+    const valor = parseFloat(valorStr.replace(/\./g, '').replace(',', '.'));
+    if (Number.isNaN(valor) || valor === 0) continue;
+    if (FiltroLinhas.deveIgnorar(descricao)) continue;
+
+    transacoes.push({
+      data: dataISO,
+      descricao,
+      valor: Math.abs(valor),
+      tipo: 'despesa', // cartão: por padrão despesa; PreviewImportacao corrige conforme sinal
+    });
+  }
+
+  return transacoes;
+}
+
 function parseGenerico(texto: string): TransacaoImportada[] {
   const transacoes: TransacaoImportada[] = [];
   const linhas = FiltroLinhas.filtrar(texto.split('\n'));
@@ -477,6 +563,12 @@ const PARSERS: Record<string, ParserDef> = {
     detectar: (texto) => /,|;/.test(texto) && /\d{2}[\/-]\d{2}/.test(texto),
     parse: parseCSV,
   },
+  cartaoPtBr: {
+    nome: 'Cartão PT-BR',
+    detectar: (texto) =>
+      /\d{1,2}\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?/i.test(texto),
+    parse: parseCartaoPtBr,
+  },
   generico: {
     nome: 'Genérico',
     detectar: () => true,
@@ -492,12 +584,14 @@ function detectarFormato(texto: string) {
 }
 
 function removerDuplicatas(transacoes: TransacaoImportada[]) {
-  const vistas = new Set<string>();
+  const contagem = new Map<string, number>();
 
   return transacoes.filter((t) => {
-    const chave = `${t.data}|${Math.abs(Number(t.valor || 0)).toFixed(2)}|${normalizarTexto(t.descricao || '')}`;
-    if (vistas.has(chave)) return false;
-    vistas.add(chave);
+    const base = `${t.data}|${Math.abs(Number(t.valor || 0)).toFixed(2)}|${normalizarTexto(t.descricao || '')}`;
+    const n = (contagem.get(base) || 0) + 1;
+    contagem.set(base, n);
+    // inclui ocorrência na chave para permitir transações idênticas legítimas
+    // (ex: duas corridas de mesmo valor no mesmo dia)
     return true;
   });
 }

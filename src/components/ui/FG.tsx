@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type PressableProps,
   type ScrollViewProps,
   type TextInputProps,
@@ -17,17 +18,24 @@ import {
 import { fg } from '../../theme/fgTheme';
 
 export function FGScrollScreen(props: ScrollViewProps & { padded?: boolean }) {
-  const { style, contentContainerStyle, padded = true, ...rest } = props;
+  const { style, contentContainerStyle, padded = true, children, ...rest } = props;
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  const pad = isDesktop ? 28 : fg.spacing.screen;
 
   return (
     <ScrollView
       style={[{ flex: 1, backgroundColor: fg.colors.bg }, style]}
       contentContainerStyle={[
-        padded ? { padding: fg.spacing.screen, paddingBottom: fg.spacing.screenBottom } : null,
+        padded ? { padding: pad, paddingBottom: fg.spacing.screenBottom, alignItems: isDesktop ? 'center' : undefined } : null,
         contentContainerStyle,
       ]}
       {...rest}
-    />
+    >
+      <View style={{ width: '100%', maxWidth: isDesktop ? 960 : undefined, alignSelf: isDesktop ? 'center' : undefined }}>
+        {children}
+      </View>
+    </ScrollView>
   );
 }
 

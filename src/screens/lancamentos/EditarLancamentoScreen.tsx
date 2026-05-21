@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
@@ -545,12 +546,47 @@ function Select({
   );
 }
 
+function DateShortcuts({ value, onSelect }: { value: string; onSelect: (v: string) => void }) {
+  const hoje = new Date();
+  const ontem = new Date(Date.now() - 86400000);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const opts = [
+    { label: 'Hoje', val: fmt(hoje) },
+    { label: 'Ontem', val: fmt(ontem) },
+  ];
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+      {opts.map((o) => (
+        <Pressable
+          key={o.val}
+          onPress={() => onSelect(o.val)}
+          style={({ pressed }) => ({
+            paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+            backgroundColor: value === o.val ? fg.colors.accentSoft : 'transparent',
+            borderWidth: 1, borderColor: value === o.val ? fg.colors.accent : fg.colors.border,
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ color: value === o.val ? fg.colors.accent : fg.colors.muted, fontSize: 11, fontWeight: '600' }}>
+            {o.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 /** ---------- Screen ---------- */
 
 export default function EditarLancamentoScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { id } = (route.params || {}) as RouteParams;
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1112,7 +1148,11 @@ export default function EditarLancamentoScreen() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={[styles.container, isDesktop && { alignItems: 'center', paddingHorizontal: 28 }]}
+    >
+      <View style={{ width: '100%', maxWidth: isDesktop ? 720 : undefined }}>
       <Card>
         <Text style={styles.title}>Editar Lançamento</Text>
         <Text style={styles.subtitle}>{grupoAtivo?.nome_grupo || 'Minha Carteira'}</Text>
@@ -1121,14 +1161,28 @@ export default function EditarLancamentoScreen() {
 
       <View style={{ height: 10 }} />
 
-      <Card>
-        <Text style={styles.sectionLabel}>Tipo</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <Chip label="Despesa" active={tipo === 'despesa'} onPress={() => setTipo('despesa')} />
-          <Chip label="Receita" active={tipo === 'receita'} onPress={() => setTipo('receita')} />
-          <Chip label="Transferência" active={tipo === 'transferencia'} onPress={() => setTipo('transferencia')} />
-        </View>
-      </Card>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+        {([
+          { value: 'despesa', label: 'Despesa', color: fg.colors.danger, bg: fg.colors.dangerSoft },
+          { value: 'receita', label: 'Receita', color: fg.colors.accent, bg: fg.colors.accentSoft },
+          { value: 'transferencia', label: 'Transferência', color: fg.colors.info, bg: fg.colors.infoSoft },
+        ] as const).map((t) => (
+          <Pressable
+            key={t.value}
+            onPress={() => setTipo(t.value as TipoLanc)}
+            style={({ pressed }) => ({
+              flex: 1, paddingVertical: 10, borderRadius: fg.radius.md, alignItems: 'center',
+              backgroundColor: tipo === t.value ? t.bg : fg.colors.surface,
+              borderWidth: 1, borderColor: tipo === t.value ? t.color : fg.colors.border,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Text style={{ color: tipo === t.value ? t.color : fg.colors.muted, fontSize: 12, fontWeight: '700' }}>
+              {t.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       <View style={{ height: 10 }} />
 
@@ -1184,12 +1238,13 @@ export default function EditarLancamentoScreen() {
 
       <Card>
         <Input
-          label="Data da Despesa *"
-          placeholder="YYYY-MM-DD"
+          label="Data *"
+          placeholder="AAAA-MM-DD"
           value={dataDespesa}
           onChangeText={setDataDespesa}
           keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
         />
+        <DateShortcuts value={dataDespesa} onSelect={setDataDespesa} />
         {(tipo === 'transferencia' || (contaOrigem?.tipo || '').toLowerCase() === 'cartao') ? (
           <>
             <View style={{ height: 12 }} />
@@ -1255,6 +1310,7 @@ export default function EditarLancamentoScreen() {
       </View>
 
       <View style={{ height: 18 }} />
+      </View>
     </ScrollView>
   );
 }

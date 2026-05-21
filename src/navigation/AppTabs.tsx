@@ -1,12 +1,12 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import DashboardScreen from '../screens/home/DashboardScreen';
 import LancamentosScreen from '../screens/lancamentos/LancamentosScreen';
 import ImportarScreen from '../screens/importacao/ImportarScreen';
 import RelatoriosScreen from '../screens/relatorios/RelatoriosScreen';
 import MaisScreen from '../screens/mais/MaisScreen';
-import { colors } from '../constants/colors';
+import { useAppTheme } from '../context/ThemeContext';
 
 export type AppTabsParamList = {
   Home: undefined;
@@ -31,9 +31,18 @@ const TAB_ITEMS: Array<{
 ];
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { colors: c } = useAppTheme();
+
   return (
-    <View style={styles.tabBar}>
-      <View style={styles.tabRow}>
+    <View style={{
+      backgroundColor: c.bg,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingHorizontal: 10,
+      paddingBottom: 8,
+      paddingTop: 8,
+    }}>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
@@ -54,18 +63,29 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             <Pressable
               key={route.key}
               onPress={onPress}
-              style={[styles.tabItem, isFocused && styles.tabItemActive]}
+              style={{
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 8,
+                borderRadius: 12,
+                backgroundColor: isFocused ? c.elevated : c.surface,
+                borderWidth: 1,
+                borderColor: isFocused ? c.accent : c.border,
+                gap: 2,
+              }}
               accessibilityRole="button"
               accessibilityLabel={options.tabBarAccessibilityLabel ?? item?.label}
               accessibilityState={{ selected: isFocused }}
             >
-              <Text style={[styles.tabIcon, isFocused && styles.tabIconActive]}>
+              <Text style={{ fontSize: 16, color: isFocused ? c.accent : c.muted }}>
                 {item?.icon ?? '•'}
               </Text>
-              <Text
-                style={[styles.tabLabel, isFocused && styles.tabLabelActive]}
-                numberOfLines={1}
-              >
+              <Text style={{
+                fontSize: 9, fontWeight: '500',
+                color: isFocused ? c.accent : c.muted,
+                textTransform: 'uppercase', letterSpacing: 0.4,
+              }} numberOfLines={1}>
                 {item?.label ?? route.name}
               </Text>
             </Pressable>
@@ -77,20 +97,22 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function AppTabs() {
+  const { colors: c } = useAppTheme();
+
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerStyle: {
-          backgroundColor: colors.bg.surface,
-          borderBottomColor: colors.border.default,
+          backgroundColor: c.surface,
+          borderBottomColor: c.border,
           borderBottomWidth: 1,
         },
-        headerTintColor: colors.text.primary,
+        headerTintColor: c.text,
         headerTitleStyle: {
           fontSize: 20,
           fontWeight: '500',
-          color: colors.text.primary,
+          color: c.text,
         },
       }}
     >
@@ -102,50 +124,3 @@ export default function AppTabs() {
     </Tab.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.bg.base,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.default,
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-    paddingTop: 8,
-  },
-  tabRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: colors.bg.surface,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-    gap: 2,
-  },
-  tabItemActive: {
-    backgroundColor: colors.bg.elevated,
-    borderColor: colors.green,
-  },
-  tabIcon: {
-    fontSize: 16,
-    color: colors.text.secondary,
-  },
-  tabIconActive: {
-    color: colors.green,
-  },
-  tabLabel: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: colors.text.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  tabLabelActive: {
-    color: colors.green,
-  },
-});

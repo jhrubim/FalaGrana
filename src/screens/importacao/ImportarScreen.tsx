@@ -1,21 +1,21 @@
 // src/screens/importacao/ImportarScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { AppStackParamList } from '../../navigation/AppStack';
 import { importarExtratoTexto } from '../../utils/importacaoExtrato';
-import { setImportacaoPreviewPayload } from '../../utils/importacaoPreviewSession';
+import { getImportacaoPreviewPayload, setImportacaoPreviewPayload } from '../../utils/importacaoPreviewSession';
 import { fg } from '../../theme/fgTheme';
 import {
   FGAlertBox,
@@ -129,7 +129,10 @@ function pareceLinhaDataDescValor(dateStr: string, valueStr: string) {
   const d = String(dateStr || '').trim();
   const v = String(valueStr || '').trim();
 
-  const okDate = /^\d{2}\/\d{2}\/\d{4}$/.test(d) || /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const okDate =
+    /^\d{2}\/\d{2}\/\d{4}$/.test(d) ||
+    /^\d{4}-\d{2}-\d{2}$/.test(d) ||
+    /^\d{1,2}\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?$/i.test(d);
   const okValue = /^[-+]?\d[\d.,]*$/.test(v) && /\d/.test(v);
 
   return okDate && okValue;
@@ -215,6 +218,26 @@ export default function ImportarScreen() {
   const [buscaConta, setBuscaConta] = useState('');
   const [modalConta, setModalConta] = useState(false);
 
+  const [erroProcessamento, setErroProcessamento] = useState<string | null>(null);
+  const [infoProcessamento, setInfoProcessamento] = useState<string | null>(null);
+
+  // Detecta retorno da tela de preview: se o payload foi limpo lá, o import foi concluído
+  const foiParaPreviewRef = useRef(false);
+
+  useFocusEffect(useCallback(() => {
+    if (!foiParaPreviewRef.current) return;
+    foiParaPreviewRef.current = false;
+    // Payload null = import concluído com sucesso → limpa formulário
+    if (getImportacaoPreviewPayload() === null) {
+      setTextoExtrato('');
+      setSaldoExtratoRef('');
+      setContaSelecionada(null);
+      setUltimoResumo(null);
+      setErroProcessamento(null);
+      setInfoProcessamento(null);
+    }
+  }, []));
+
   const [ultimoResumo, setUltimoResumo] = useState<{
     total: number;
     saldoFinal: number;
@@ -296,23 +319,23 @@ export default function ImportarScreen() {
   const processarImportacao = async () => {
     if (processando) return;
 
+    setErroProcessamento(null);
+    setInfoProcessamento(null);
+
     if (isViewer) {
-      Alert.alert('Sem permissão', 'Seu perfil é de visualização.');
+      setErroProcessamento('Seu perfil é de visualização — sem permissão para importar.');
       return;
     }
-
     if (!grupoAtivo?.grupo_id) {
-      Alert.alert('Erro', 'Acesso não identificado.');
+      setErroProcessamento('Acesso não identificado. Tente recarregar a tela.');
       return;
     }
-
     if (!contaSelecionada?.id) {
-      Alert.alert('Validação', 'Selecione a conta/cartão.');
+      setErroProcessamento('Selecione a conta ou cartão antes de continuar.');
       return;
     }
-
     if (!textoExtrato.trim()) {
-      Alert.alert('Validação', 'Cole o texto do extrato.');
+      setErroProcessamento('Cole o texto do extrato no campo acima.');
       return;
     }
 
@@ -320,11 +343,7 @@ export default function ImportarScreen() {
 
     try {
       const corte = truncarExtratoAposMarcador(textoExtrato);
-
-      // ✅ 1) sanitiza descrição (APPLE.COM/BILL -> APPLE COM BILL), sem mexer na data
       const san = sanitizarDescricaoNoExtrato(corte.textoUtil);
-
-      // ✅ 2) normaliza 1 casa decimal (5,9 -> 5,90)
       const textoNormalizado = normalizarValores1CasaDecimal(san.texto);
 
       const resultado = importarExtratoTexto(textoNormalizado);
@@ -333,7 +352,6 @@ export default function ImportarScreen() {
 
       let transacoes = (resultado.transacoes || []) as Array<any>;
 
-      // ✅ ignora "Pagamento Efetuado" no cartão
       let ignoradosPagamento = 0;
       if (contaEhCartao) {
         const antes = transacoes.length;
@@ -360,12 +378,10 @@ export default function ImportarScreen() {
       });
 
       if (!transacoes.length) {
-        Alert.alert(
-          'Nada para importar',
-          corte.cortou
-            ? `Não encontrei lançamentos válidos antes do marcador.\n\nMarcador: "${corte.marcador}".`
-            : 'Nenhum lançamento válido encontrado.'
-        );
+        const msg = corte.cortou
+          ? `Nenhum lançamento válido encontrado antes do marcador “${corte.marcador}”. Verifique o formato do extrato.`
+          : `Nenhum lançamento válido encontrado. Formato detectado: ${resultado.formato}. Verifique se o texto foi copiado corretamente.`;
+        setErroProcessamento(msg);
         return;
       }
 
@@ -388,20 +404,21 @@ export default function ImportarScreen() {
       );
 
       if (corte.cortou) {
-        Alert.alert('Futuros ignorados', `Tudo após o marcador foi desprezado.\n\nMarcador: "${corte.marcador}".`);
-      } else {
-        const temFuturosNoTexto = normFind(textoExtrato).includes('futuros');
-        if (temFuturosNoTexto) {
-          Alert.alert(
-            'Atenção',
-            'Encontrei a palavra "futuros" no texto, mas não consegui identificar o marcador de corte.\n\nSe o extrato tiver uma seção “lançamentos futuros/saídas futuras”, confirme se essas palavras aparecem como título no texto colado.'
-          );
-        }
+        setInfoProcessamento(`Lançamentos futuros ignorados — tudo após “${corte.marcador}” foi descartado (${corte.linhasRemovidas} linhas).`);
+      } else if (normFind(textoExtrato).includes('futuros')) {
+        setInfoProcessamento('Encontrei a palavra “futuros” no texto, mas não identifiquei o marcador de corte. Confira se há lançamentos futuros incluídos.');
       }
 
+      foiParaPreviewRef.current = true;
       navigation.navigate('PreviewImportacao');
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível processar o extrato.');
+      const msg = (e as any)?.message || 'Não foi possível processar o extrato.';
+      setErroProcessamento(msg);
+      if (Platform.OS !== 'web') {
+        // em mobile, Alert dá mais visibilidade
+        const { Alert } = require('react-native');
+        Alert.alert('Erro na importação', msg);
+      }
     } finally {
       setProcessando(false);
     }
@@ -491,9 +508,17 @@ export default function ImportarScreen() {
           </FGCard>
         ) : null}
 
+        {erroProcessamento ? (
+          <FGAlertBox variant="danger" text={erroProcessamento} />
+        ) : null}
+
+        {infoProcessamento ? (
+          <FGAlertBox variant="warn" text={infoProcessamento} />
+        ) : null}
+
         <View style={{ marginTop: 6 }}>
           <FGButton
-            title="Processar e revisar"
+            title={processando ? 'Processando...' : 'Processar e revisar'}
             onPress={processarImportacao}
             loading={processando}
             disabled={processando || isViewer}

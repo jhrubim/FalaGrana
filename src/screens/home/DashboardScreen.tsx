@@ -12,9 +12,11 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { useAppTheme } from '../../context/ThemeContext';
 
 type GrupoAtivo = {
   grupo_id: string;
@@ -117,12 +119,13 @@ function Card({
   style?: any;
   noShadow?: boolean;
 }) {
+  const { colors: c } = useAppTheme();
   return (
     <View
       style={[
         {
-          backgroundColor: '#161b22',
-          borderColor: '#21262d',
+          backgroundColor: c.surface,
+          borderColor: c.border,
           borderWidth: 1,
           borderRadius: 14,
           padding: 12,
@@ -130,7 +133,7 @@ function Card({
             ? {}
             : {
                 shadowColor: '#000',
-                shadowOpacity: 0.3,
+                shadowOpacity: 0.2,
                 shadowRadius: 12,
                 shadowOffset: { width: 0, height: 4 },
                 elevation: 2,
@@ -155,9 +158,10 @@ function Button({
   disabled?: boolean;
   variant?: 'primary' | 'ghost';
 }) {
+  const { colors: c } = useAppTheme();
   const isGhost = variant === 'ghost';
-  const bg = isGhost ? 'transparent' : '#4ade80';
-  const tx = isGhost ? '#e6edf3' : '#0d1117';
+  const bg = isGhost ? 'transparent' : c.accent;
+  const tx = isGhost ? c.text : c.onLight;
 
   return (
     <Pressable
@@ -166,7 +170,7 @@ function Button({
       style={({ pressed }) => [
         {
           backgroundColor: bg,
-          borderColor: isGhost ? '#21262d' : 'transparent',
+          borderColor: isGhost ? c.border : 'transparent',
           borderWidth: isGhost ? 1 : 0,
           paddingHorizontal: 12,
           paddingVertical: 10,
@@ -191,28 +195,23 @@ function Chip({
   active?: boolean;
   onPress: () => void;
 }) {
-  const activeBorderColor = active ? '#4ade80' : '#21262d';
-  const activeBg = active ? '#111a11' : '#161b22';
-  const activeText = active ? '#4ade80' : '#7d8590';
-
+  const { colors: c } = useAppTheme();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        {
-          borderColor: activeBorderColor,
-          borderWidth: 1,
-          backgroundColor: activeBg,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
-          borderRadius: 999,
-          opacity: pressed ? 0.85 : 1,
-          marginRight: 8,
-          marginBottom: 8,
-        },
-      ]}
+      style={({ pressed }) => ({
+        borderColor: active ? c.accent : c.border,
+        borderWidth: 1,
+        backgroundColor: active ? c.elevated : c.surface,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 999,
+        opacity: pressed ? 0.85 : 1,
+        marginRight: 8,
+        marginBottom: 8,
+      })}
     >
-      <Text style={{ color: activeText, fontWeight: '600', fontSize: 12 }}>{label}</Text>
+      <Text style={{ color: active ? c.accent : c.muted, fontWeight: '600', fontSize: 12 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -228,20 +227,17 @@ function Header({
   info?: string;
   right?: React.ReactNode;
 }) {
+  const { colors: c } = useAppTheme();
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 18 }}>{title}</Text>
+          <Text style={{ color: c.text, fontWeight: '600', fontSize: 18 }}>{title}</Text>
           {subtitle ? (
-            <Text style={{ marginTop: 4, color: '#7d8590', fontWeight: '400', fontSize: 12 }}>
-              {subtitle}
-            </Text>
+            <Text style={{ marginTop: 4, color: c.muted, fontWeight: '400', fontSize: 12 }}>{subtitle}</Text>
           ) : null}
           {info ? (
-            <Text style={{ marginTop: 6, color: '#7d8590', fontWeight: '400', fontSize: 11 }}>
-              {info}
-            </Text>
+            <Text style={{ marginTop: 6, color: c.muted, fontWeight: '400', fontSize: 11 }}>{info}</Text>
           ) : null}
         </View>
         {right ? <View>{right}</View> : null}
@@ -251,10 +247,11 @@ function Header({
 }
 
 function Centered({ message }: { message: string }) {
+  const { colors: c } = useAppTheme();
   return (
-    <View style={{ flex: 1, padding: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117' }}>
-      <ActivityIndicator size="large" color="#4ade80" />
-      <Text style={{ marginTop: 12, color: '#7d8590', fontWeight: '400' }}>{message}</Text>
+    <View style={{ flex: 1, padding: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg }}>
+      <ActivityIndicator size="large" color={c.accent} />
+      <Text style={{ marginTop: 12, color: c.muted, fontWeight: '400' }}>{message}</Text>
     </View>
   );
 }
@@ -270,19 +267,15 @@ function KpiCard({
   variant: 'pos' | 'neg' | 'neutral';
   hint?: string;
 }) {
-  const color =
-    variant === 'pos'
-      ? '#4ade80'
-      : variant === 'neg'
-        ? '#f87171'
-        : '#e6edf3';
+  const { colors: c } = useAppTheme();
+  const color = variant === 'pos' ? c.accent : variant === 'neg' ? c.danger : c.text;
 
   return (
-    <Card style={{ flexGrow: 1, flexBasis: 220, backgroundColor: '#161b22', borderColor: '#21262d', borderRadius: 12 }} noShadow>
-      <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' }}>{label}</Text>
-      <Text style={{ color, fontWeight: '600', fontSize: 16, marginTop: 6 }}>{value}</Text>
+    <Card style={{ flex: 1, borderRadius: 12 }} noShadow>
+      <Text style={{ color: c.muted, fontWeight: '600', fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' }}>{label}</Text>
+      <Text style={{ color, fontWeight: '700', fontSize: 15, marginTop: 6 }} numberOfLines={1}>{value}</Text>
       {hint ? (
-        <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 6 }}>{hint}</Text>
+        <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 4 }} numberOfLines={1}>{hint}</Text>
       ) : null}
     </Card>
   );
@@ -301,20 +294,21 @@ function HeroCard({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const { colors: c } = useAppTheme();
   const isPos = saldo >= 0;
   const formatted = formatMoney(saldo);
-  const dataLabel = dataRef ? `Saldo em ${ddmm(dataRef)}` : 'Saldo atual';
+  const dataLabel = dataRef ? `Saldo bancário em ${ddmm(dataRef)}` : 'Saldo bancário';
 
   return (
     <View
       style={{
-        backgroundColor: '#111a11',
-        borderColor: '#1e3a1e',
+        backgroundColor: c.elevated,
+        borderColor: c.borderSoft,
         borderWidth: 1,
         borderRadius: 16,
         padding: 20,
         shadowColor: '#000',
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.2,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: 6 },
         elevation: 4,
@@ -322,36 +316,26 @@ function HeroCard({
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              color: '#4a7a4a',
-              fontWeight: '600',
-              fontSize: 11,
-              letterSpacing: 0.8,
-              textTransform: 'uppercase',
-            }}
-          >
+          <Text style={{ color: c.muted2, fontWeight: '600', fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' }}>
             {walletName}
           </Text>
-          <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }}>
+          <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }}>
             {dataLabel}
           </Text>
         </View>
         <Pressable
           onPress={onRefresh}
           disabled={refreshing}
-          style={({ pressed }) => [
-            {
-              borderWidth: 1,
-              borderColor: '#1e3a1e',
-              borderRadius: 10,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              opacity: refreshing || pressed ? 0.6 : 1,
-            },
-          ]}
+          style={({ pressed }) => ({
+            borderWidth: 1,
+            borderColor: c.borderSoft,
+            borderRadius: 10,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            opacity: refreshing || pressed ? 0.6 : 1,
+          })}
         >
-          <Text style={{ color: '#4a7a4a', fontSize: 12, fontWeight: '600' }}>
+          <Text style={{ color: c.muted2, fontSize: 12, fontWeight: '600' }}>
             {refreshing ? '...' : 'Atualizar'}
           </Text>
         </Pressable>
@@ -359,7 +343,7 @@ function HeroCard({
 
       <Text
         style={{
-          color: isPos ? '#4ade80' : '#f87171',
+          color: isPos ? c.accent : c.danger,
           fontSize: 36,
           fontWeight: '600',
           marginTop: 16,
@@ -384,6 +368,7 @@ function SimpleBarChart({
   points: Array<{ label: string; value: number }>;
   valueFormatter: (n: number) => string;
 }) {
+  const { colors: c } = useAppTheme();
   const max = Math.max(1, ...points.map((p) => p.value));
   const total = points.reduce((a, p) => a + p.value, 0);
   const top = points.reduce((acc, p) => (p.value > acc.value ? p : acc), { label: '-', value: 0 });
@@ -392,18 +377,15 @@ function SimpleBarChart({
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 14 }}>{title}</Text>
+          <Text style={{ color: c.text, fontWeight: '600', fontSize: 14 }}>{title}</Text>
           {subtitle ? (
-            <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }}>
-              {subtitle}
-            </Text>
+            <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 4 }}>{subtitle}</Text>
           ) : null}
         </View>
-
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11 }}>Total</Text>
-          <Text style={{ color: '#f87171', fontWeight: '600', fontSize: 13 }}>{valueFormatter(total)}</Text>
-          <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11 }}>
+          <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11 }}>Total</Text>
+          <Text style={{ color: c.danger, fontWeight: '600', fontSize: 13 }}>{valueFormatter(total)}</Text>
+          <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11 }}>
             Pico {top.label} • {valueFormatter(top.value)}
           </Text>
         </View>
@@ -412,35 +394,31 @@ function SimpleBarChart({
       <View style={{ height: 10 }} />
 
       {points.length === 0 ? (
-        <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem dados no período.</Text>
+        <Text style={{ color: c.muted, fontWeight: '400' }}>Sem dados no período.</Text>
       ) : (
         <>
-          <View
-            style={{
-              height: 120,
-              borderWidth: 1,
-              borderColor: '#21262d',
-              borderRadius: 14,
-              padding: 10,
-              backgroundColor: '#161b22',
-              flexDirection: 'row',
-              alignItems: 'flex-end',
-              gap: 6,
-            }}
-          >
+          <View style={{
+            height: 120,
+            borderWidth: 1,
+            borderColor: c.border,
+            borderRadius: 14,
+            padding: 10,
+            backgroundColor: c.elevated,
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            gap: 6,
+          }}>
             {points.map((p, idx) => {
               const h = Math.max(2, Math.round((p.value / max) * 95));
               const isLast = idx === points.length - 1;
               return (
                 <View key={`${p.label}-${idx}`} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <View
-                    style={{
-                      width: '100%',
-                      height: h,
-                      backgroundColor: isLast ? '#4ade80' : '#2d4a2d',
-                      borderRadius: 10,
-                    }}
-                  />
+                  <View style={{
+                    width: '100%',
+                    height: h,
+                    backgroundColor: isLast ? c.accent : c.accentSoft,
+                    borderRadius: 10,
+                  }} />
                 </View>
               );
             })}
@@ -448,12 +426,8 @@ function SimpleBarChart({
 
           <View style={{ height: 8 }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11 }}>
-              {points[0]?.label || '-'}
-            </Text>
-            <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11 }}>
-              {points[points.length - 1]?.label || '-'}
-            </Text>
+            <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11 }}>{points[0]?.label || '-'}</Text>
+            <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11 }}>{points[points.length - 1]?.label || '-'}</Text>
           </View>
         </>
       )}
@@ -480,19 +454,20 @@ function CategoryBars({
   selectedGrupo: string | null;
   onToggleDetail: (grupo: string) => void;
 }) {
+  const { colors: c } = useAppTheme();
   const max = Math.max(1, ...items.map((x) => x.value));
 
   return (
     <Card>
-      <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 14 }}>{title}</Text>
+      <Text style={{ color: c.text, fontWeight: '600', fontSize: 14 }}>{title}</Text>
       {subtitle ? (
-        <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }}>{subtitle}</Text>
+        <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 4 }}>{subtitle}</Text>
       ) : null}
 
       <View style={{ height: 10 }} />
 
       {items.length === 0 ? (
-        <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem gastos no período.</Text>
+        <Text style={{ color: c.muted, fontWeight: '400' }}>Sem gastos no período.</Text>
       ) : (
         items.map((it) => {
           const pct = total > 0 ? Math.round((it.value / total) * 100) : 0;
@@ -504,22 +479,20 @@ function CategoryBars({
               key={it.key}
               style={{
                 borderWidth: 1,
-                borderColor: isSel ? '#4ade80' : '#21262d',
+                borderColor: isSel ? c.accent : c.border,
                 borderRadius: 12,
                 padding: 10,
                 marginBottom: 8,
-                backgroundColor: '#161b22',
+                backgroundColor: isSel ? c.accentSoft : c.surface,
               }}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <Pressable
                   onPress={() => onDrillGrupo(it.key)}
-                  style={({ pressed }) => [{ flex: 1, opacity: pressed ? 0.9 : 1 }]}
+                  style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.9 : 1 })}
                 >
-                  <Text style={{ color: '#e6edf3', fontWeight: '600' }} numberOfLines={1}>
-                    {it.label}
-                  </Text>
-                  <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }}>
+                  <Text style={{ color: c.text, fontWeight: '600' }} numberOfLines={1}>{it.label}</Text>
+                  <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }}>
                     {formatMoney(it.value)} • {pct}%
                   </Text>
                 </Pressable>
@@ -527,40 +500,24 @@ function CategoryBars({
                 {it.key !== '__outros__' ? (
                   <Pressable
                     onPress={() => onToggleDetail(it.key)}
-                    style={({ pressed }) => [
-                      {
-                        borderWidth: 1,
-                        borderColor: '#21262d',
-                        borderRadius: 12,
-                        paddingHorizontal: 10,
-                        paddingVertical: 8,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
+                    style={({ pressed }) => ({
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      borderRadius: 12,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
                   >
-                    <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 12 }}>
+                    <Text style={{ color: c.text, fontWeight: '600', fontSize: 12 }}>
                       {isSel ? 'Fechar' : 'Detalhar'}
                     </Text>
                   </Pressable>
                 ) : null}
               </View>
 
-              <View
-                style={{
-                  marginTop: 8,
-                  height: 3,
-                  borderRadius: 2,
-                  backgroundColor: '#21262d',
-                  overflow: 'hidden',
-                }}
-              >
-                <View
-                  style={{
-                    width: `${Math.round(barPct * 100)}%`,
-                    height: 3,
-                    backgroundColor: '#f87171',
-                  }}
-                />
+              <View style={{ marginTop: 8, height: 3, borderRadius: 2, backgroundColor: c.border, overflow: 'hidden' }}>
+                <View style={{ width: `${Math.round(barPct * 100)}%`, height: 3, backgroundColor: c.danger }} />
               </View>
             </View>
           );
@@ -574,6 +531,8 @@ function CategoryBars({
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const { width } = useWindowDimensions();
+  const { colors: c } = useAppTheme();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -852,6 +811,36 @@ export default function DashboardScreen() {
 
   const saldoTotalContas = useMemo(() => saldosOrdenados.reduce((acc, c: any) => acc + Number(c.saldo || 0), 0), [saldosOrdenados]);
 
+  const contasBanco = useMemo(
+    () => saldosOrdenados.filter((c: any) => (c.tipo || '').toLowerCase() === 'banco'),
+    [saldosOrdenados]
+  );
+  const contasCartao = useMemo(
+    () => saldosOrdenados.filter((c: any) => (c.tipo || '').toLowerCase() === 'cartao'),
+    [saldosOrdenados]
+  );
+  const contasOutras = useMemo(
+    () => saldosOrdenados.filter((c: any) => {
+      const t = (c.tipo || '').toLowerCase();
+      return t !== 'banco' && t !== 'cartao';
+    }),
+    [saldosOrdenados]
+  );
+
+  const saldoBancario = useMemo(
+    () => contasBanco.reduce((acc, c: any) => acc + Number(c.saldo || 0), 0),
+    [contasBanco]
+  );
+  const totalFatura = useMemo(
+    () => contasCartao.reduce((acc, c: any) => acc + Math.min(0, Number(c.saldo || 0)), 0),
+    [contasCartao]
+  );
+
+  const pendentes = useMemo(
+    () => transacoesPeriodo.filter((t) => t.status === 'pendente'),
+    [transacoesPeriodo]
+  );
+
   // ✅ KPIs do período (sem transferências)
   const agregados = useMemo(() => {
     let receitas = 0;
@@ -1056,75 +1045,190 @@ export default function DashboardScreen() {
         : 'Personalizado'
       : range.label;
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: '#0d1117' }}
-      contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4ade80" />}
-    >
-      {/* ── Hero: saldo total + data de referência ── */}
+  const isWide = width >= 900;
+  const maxW = isWide ? 1200 : undefined;
+
+  /* ── blocos reutilizáveis ── */
+
+  const leftColumn = (
+    <>
+      {/* Hero: saldo bancário */}
       <HeroCard
-        saldo={saldoTotalContas}
+        saldo={saldoBancario}
         dataRef={dataUltimaTransacao}
         walletName={grupoAtivo?.nome_grupo || 'Minha Carteira'}
         onRefresh={carregarTela}
         refreshing={refreshing}
       />
 
+      {/* Resumo do mês — 3 chips rápidos */}
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+        <View style={{ flex: 1, backgroundColor: c.accentSoft, borderColor: c.accent + '55', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+          <Text style={{ color: c.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Receita</Text>
+          <Text style={{ color: c.accent, fontWeight: '700', fontSize: 13, marginTop: 3 }} numberOfLines={1}>{formatMoney(agregados.receitas)}</Text>
+        </View>
+        <View style={{ flex: 1, backgroundColor: c.dangerSoft, borderColor: c.danger + '55', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+          <Text style={{ color: c.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Gastos</Text>
+          <Text style={{ color: c.danger, fontWeight: '700', fontSize: 13, marginTop: 3 }} numberOfLines={1}>{formatMoney(agregados.despesas)}</Text>
+        </View>
+        <View style={{
+          flex: 1,
+          backgroundColor: agregados.resultado >= 0 ? c.accentSoft : c.dangerSoft,
+          borderColor: (agregados.resultado >= 0 ? c.accent : c.danger) + '55',
+          borderWidth: 1, borderRadius: 10, padding: 10,
+        }}>
+          <Text style={{ color: c.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Resultado</Text>
+          <Text style={{ color: agregados.resultado >= 0 ? c.accent : c.danger, fontWeight: '700', fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+            {formatMoney(agregados.resultado)}
+          </Text>
+        </View>
+      </View>
+
       <View style={{ height: 12 }} />
 
-      {/* ── Saldos por conta ── */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={styles.sectionTitle}>Contas</Text>
+      {/* Card de conciliação — pendentes */}
+      {pendentes.length > 0 && (
         <Pressable
-          onPress={() => navigation.navigate('Lancamentos')}
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          onPress={() => navigation.navigate('Lancamentos', { prefill: { filtroStatus: 'pendente' } })}
+          style={({ pressed }) => ({
+            backgroundColor: c.warnSoft,
+            borderColor: c.warn + '88',
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: 12,
+            opacity: pressed ? 0.8 : 1,
+          })}
+          accessibilityLabel={`${pendentes.length} lançamentos pendentes de conciliação`}
         >
-          <Text style={{ color: '#4a7a4a', fontSize: 12, fontWeight: '600' }}>Ver lancamentos</Text>
+          <Text style={{ fontSize: 20 }}>⚠</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: c.warn, fontWeight: '700', fontSize: 13 }}>
+              {pendentes.length} lançamento{pendentes.length !== 1 ? 's' : ''} a conciliar
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 11, marginTop: 2 }}>
+              Toque para revisar e confirmar
+            </Text>
+          </View>
+          <Text style={{ color: c.warn, fontSize: 16 }}>›</Text>
         </Pressable>
-      </View>
+      )}
 
-      <View style={styles.accountsGrid}>
-        {saldosOrdenados.map((c: any) => {
-          const tipo = String(c.tipo || '').toLowerCase();
-          const badge = tipo === 'cartao' ? 'CARTAO' : tipo === 'banco' ? 'BANCO' : (c.tipo || 'CONTA').toUpperCase();
-          const saldo = Number(c.saldo || 0);
+      {/* Contas bancárias */}
+      {contasBanco.length > 0 && (
+        <>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={[styles.sectionTitle, { color: c.muted }]}>Banco</Text>
+            <Pressable onPress={() => navigation.navigate('Lancamentos')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+              <Text style={{ color: c.muted2, fontSize: 12, fontWeight: '600' }}>Ver lançamentos</Text>
+            </Pressable>
+          </View>
+          <View style={styles.accountsGrid}>
+            {contasBanco.map((ct: any) => {
+              const saldo = Number(ct.saldo || 0);
+              return (
+                <Card key={ct.id} style={styles.accountCard} noShadow>
+                  <Text style={[styles.accountType, { color: c.muted }]}>BANCO</Text>
+                  <Text style={[styles.accountName, { color: c.text }]} numberOfLines={1}>{ct.nome}</Text>
+                  <Text style={{ marginTop: 6, fontWeight: '600', fontSize: 13, color: saldo >= 0 ? c.accent : c.danger }}>
+                    {formatMoney(saldo)}
+                  </Text>
+                </Card>
+              );
+            })}
+          </View>
+          <View style={{ height: 12 }} />
+        </>
+      )}
 
-          return (
-            <Card key={c.id} style={styles.accountCard} noShadow>
-              <Text style={styles.accountType}>{badge}</Text>
-              <Text style={styles.accountName} numberOfLines={1}>{c.nome}</Text>
-              <Text style={[styles.accountSaldo, saldo >= 0 ? styles.pos : styles.neg]}>{formatMoney(saldo)}</Text>
-            </Card>
-          );
-        })}
-      </View>
+      {/* Cartões de crédito */}
+      {contasCartao.length > 0 && (
+        <>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={[styles.sectionTitle, { color: c.muted }]}>Cartões</Text>
+            {totalFatura < 0 && (
+              <Text style={{ color: c.danger, fontSize: 12, fontWeight: '600' }}>
+                Fatura total: {formatMoney(Math.abs(totalFatura))}
+              </Text>
+            )}
+          </View>
+          <View style={styles.accountsGrid}>
+            {contasCartao.map((ct: any) => {
+              const saldo = Number(ct.saldo || 0);
+              const temFatura = saldo < 0;
+              return (
+                <Card key={ct.id} style={[styles.accountCard, temFatura && { borderColor: c.danger + '44' }]} noShadow>
+                  <Text style={[styles.accountType, { color: c.muted }]}>CARTÃO</Text>
+                  <Text style={[styles.accountName, { color: c.text }]} numberOfLines={1}>{ct.nome}</Text>
+                  {temFatura ? (
+                    <>
+                      <Text style={{ marginTop: 6, fontWeight: '700', fontSize: 12, color: c.danger }}>
+                        Fatura: {formatMoney(Math.abs(saldo))}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={{ marginTop: 6, fontWeight: '600', fontSize: 13, color: c.accent }}>
+                      {formatMoney(saldo)}
+                    </Text>
+                  )}
+                </Card>
+              );
+            })}
+          </View>
+          <View style={{ height: 12 }} />
+        </>
+      )}
 
-      <View style={{ height: 16 }} />
+      {/* Outras contas */}
+      {contasOutras.length > 0 && (
+        <>
+          <View style={{ marginBottom: 8 }}>
+            <Text style={[styles.sectionTitle, { color: c.muted }]}>Outras contas</Text>
+          </View>
+          <View style={styles.accountsGrid}>
+            {contasOutras.map((ct: any) => {
+              const saldo = Number(ct.saldo || 0);
+              return (
+                <Card key={ct.id} style={styles.accountCard} noShadow>
+                  <Text style={[styles.accountType, { color: c.muted }]}>{(ct.tipo || 'CONTA').toUpperCase()}</Text>
+                  <Text style={[styles.accountName, { color: c.text }]} numberOfLines={1}>{ct.nome}</Text>
+                  <Text style={{ marginTop: 6, fontWeight: '600', fontSize: 13, color: saldo >= 0 ? c.accent : c.danger }}>
+                    {formatMoney(saldo)}
+                  </Text>
+                </Card>
+              );
+            })}
+          </View>
+          <View style={{ height: 12 }} />
+        </>
+      )}
 
-      {/* ── Divider ── */}
-      <View style={{ height: 1, backgroundColor: '#21262d', marginBottom: 16 }} />
+      <View style={{ height: 4 }} />
+      <View style={{ height: 1, backgroundColor: c.border, marginBottom: 16 }} />
 
       {erroTela ? (
         <>
           <Card>
-            <Text style={{ color: '#f87171', fontWeight: '600' }}>{erroTela}</Text>
+            <Text style={{ color: c.danger, fontWeight: '600' }}>{erroTela}</Text>
           </Card>
           <View style={{ height: 10 }} />
         </>
       ) : null}
 
-      {/* ── Período ── */}
+      {/* Período */}
       <Card>
-        <Text style={styles.sectionTitle}>Periodo</Text>
+        <Text style={[styles.sectionTitle, { color: c.muted }]}>Período</Text>
         <View style={{ height: 8 }} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <Chip label="Mes" active={rangeMode === 'mes'} onPress={() => setRangeMode('mes')} />
-          <Chip label="30d" active={rangeMode === '30d'} onPress={() => setRangeMode('30d')} />
-          <Chip label="90d" active={rangeMode === '90d'} onPress={() => setRangeMode('90d')} />
-          <Chip label="Ano" active={rangeMode === 'ano'} onPress={() => setRangeMode('ano')} />
+          <Chip label="Este mês" active={rangeMode === 'mes'} onPress={() => setRangeMode('mes')} />
+          <Chip label="30 dias" active={rangeMode === '30d'} onPress={() => setRangeMode('30d')} />
+          <Chip label="90 dias" active={rangeMode === '90d'} onPress={() => setRangeMode('90d')} />
+          <Chip label="Este ano" active={rangeMode === 'ano'} onPress={() => setRangeMode('ano')} />
           <Chip label="Total" active={rangeMode === 'total'} onPress={() => setRangeMode('total')} />
-          <Chip label="Custom" active={rangeMode === 'custom'} onPress={() => setRangeMode('custom')} />
+          <Chip label="Personalizado" active={rangeMode === 'custom'} onPress={() => setRangeMode('custom')} />
         </View>
 
         {rangeMode === 'custom' ? (
@@ -1135,18 +1239,17 @@ export default function DashboardScreen() {
                 value={customIni}
                 onChangeText={setCustomIni}
                 placeholder="Data inicial (YYYY-MM-DD)"
-                placeholderTextColor="#7d8590"
-                style={[styles.periodInput, { marginRight: 10 }]}
+                placeholderTextColor={c.muted}
+                style={[styles.periodInput, { marginRight: 10, color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
               />
               <TextInput
                 value={customFim}
                 onChangeText={setCustomFim}
                 placeholder="Data final (YYYY-MM-DD)"
-                placeholderTextColor="#7d8590"
-                style={styles.periodInput}
+                placeholderTextColor={c.muted}
+                style={[styles.periodInput, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
               />
             </View>
-
             <View style={{ height: 10 }} />
             <View style={{ flexDirection: 'row' }}>
               <View style={{ flex: 1, marginRight: 10 }}>
@@ -1162,41 +1265,45 @@ export default function DashboardScreen() {
 
       <View style={{ height: 10 }} />
 
-      {/* ── KPIs do período ── */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 } as any}>
+      {/* KPIs 2×3 */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
         <KpiCard label="Receitas" value={formatMoney(agregados.receitas)} variant="pos" hint={periodoLabel} />
         <KpiCard label="Gastos" value={formatMoney(agregados.despesas)} variant="neg" hint={periodoLabel} />
+      </View>
+      <View style={{ height: 10 }} />
+      <View style={{ flexDirection: 'row', gap: 10 }}>
         <KpiCard
           label="Resultado"
           value={formatMoney(agregados.resultado)}
           variant={agregados.resultado >= 0 ? 'pos' : 'neg'}
+          hint={periodoLabel}
         />
-        <KpiCard label="Media/dia (gastos)" value={formatMoney(agregados.mediaDia)} variant="neutral" hint={agregados.dias + ' dias'} />
+        <KpiCard label="Média/dia" value={formatMoney(agregados.mediaDia)} variant="neutral" hint={`${agregados.dias} dias`} />
       </View>
-
       <View style={{ height: 10 }} />
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 } as any}>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
         <KpiCard
           label="Maior categoria"
-          value={maiorCategoria.nome + ' ' + formatMoney(maiorCategoria.v)}
+          value={maiorCategoria.nome}
           variant="neutral"
-          hint={maiorCategoria.pct + '% dos gastos'}
+          hint={`${formatMoney(maiorCategoria.v)} • ${maiorCategoria.pct}% dos gastos`}
         />
         <KpiCard
           label="Maior despesa"
           value={formatMoney(agregados.maiorDesp.v)}
           variant="neutral"
-          hint={agregados.maiorDesp.dt + ' - ' + agregados.maiorDesp.g}
+          hint={`${agregados.maiorDesp.dt} • ${agregados.maiorDesp.g}`}
         />
       </View>
+    </>
+  );
 
-      <View style={{ height: 10 }} />
-
-      {/* ── Gastos por categoria ── */}
+  const rightColumn = (
+    <>
+      {/* Gastos por categoria */}
       <CategoryBars
         title="Gastos por categoria"
-        subtitle="Toque no grupo para abrir lancamentos filtrados"
+        subtitle="Toque no grupo para abrir lançamentos filtrados"
         items={despesasPorGrupo}
         total={totalDespesas}
         selectedGrupo={grupoDetalhe}
@@ -1212,17 +1319,13 @@ export default function DashboardScreen() {
         <>
           <View style={{ height: 10 }} />
           <Card>
-            <Text style={{ color: '#e6edf3', fontWeight: '600', fontSize: 14 }}>
-              {grupoDetalhe}
+            <Text style={{ color: c.text, fontWeight: '600', fontSize: 14 }}>{grupoDetalhe}</Text>
+            <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 4 }}>
+              Toque na subcategoria para abrir os lançamentos filtrados
             </Text>
-            <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }}>
-              Toque na subcategoria para abrir os lancamentos filtrados
-            </Text>
-
             <View style={{ height: 10 }} />
-
             {despesasPorSubgrupo.length === 0 ? (
-              <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem dados.</Text>
+              <Text style={{ color: c.muted, fontWeight: '400' }}>Sem dados.</Text>
             ) : (
               despesasPorSubgrupo.map((it) => {
                 const pct = totalDespesas > 0 ? Math.round((it.value / totalDespesas) * 100) : 0;
@@ -1230,32 +1333,27 @@ export default function DashboardScreen() {
                   <Pressable
                     key={it.key}
                     onPress={() => drillLancamentos(grupoDetalhe, it.key)}
-                    style={({ pressed }) => [
-                      {
-                        borderWidth: 1,
-                        borderColor: '#21262d',
-                        borderRadius: 12,
-                        padding: 10,
-                        marginBottom: 8,
-                        backgroundColor: '#161b22',
-                        opacity: pressed ? 0.9 : 1,
-                      },
-                    ]}
+                    style={({ pressed }) => ({
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      borderRadius: 12,
+                      padding: 10,
+                      marginBottom: 8,
+                      backgroundColor: c.surface,
+                      opacity: pressed ? 0.9 : 1,
+                    })}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-                      <Text style={{ color: '#e6edf3', fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                        {it.label}
-                      </Text>
-                      <Text style={{ color: '#f87171', fontWeight: '600', fontSize: 13 }}>{formatMoney(it.value)}</Text>
+                      <Text style={{ color: c.text, fontWeight: '600', flex: 1 }} numberOfLines={1}>{it.label}</Text>
+                      <Text style={{ color: c.danger, fontWeight: '600', fontSize: 13 }}>{formatMoney(it.value)}</Text>
                     </View>
-                    <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }}>
-                      {pct}% dos gastos do periodo
+                    <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }}>
+                      {pct}% dos gastos do período
                     </Text>
                   </Pressable>
                 );
               })
             )}
-
             <View style={{ height: 8 }} />
             <Button title="Fechar" variant="ghost" onPress={() => setGrupoDetalhe(null)} />
           </Card>
@@ -1264,9 +1362,9 @@ export default function DashboardScreen() {
 
       <View style={{ height: 10 }} />
 
-      {/* ── Grafico de gastos ── */}
+      {/* Gráfico de gastos */}
       <SimpleBarChart
-        title="Gastos ao longo do periodo"
+        title="Gastos ao longo do período"
         subtitle={serieGastos.subtitle}
         points={serieGastos.points}
         valueFormatter={formatMoney}
@@ -1274,51 +1372,73 @@ export default function DashboardScreen() {
 
       <View style={{ height: 10 }} />
 
-      {/* ── Ultimas despesas ── */}
+      {/* Últimas despesas */}
       <Card>
-        <Text style={styles.sectionTitle}>Ultimas despesas</Text>
-        <Text style={styles.sectionHint}>Toque para abrir a edicao do lancamento.</Text>
-
+        <Text style={[styles.sectionTitle, { color: c.muted }]}>Últimas despesas</Text>
+        <Text style={[styles.sectionHint, { color: c.muted }]}>Toque para abrir a edição do lançamento.</Text>
         <View style={{ height: 10 }} />
-
         {ultimasDespesas.length === 0 ? (
-          <Text style={{ color: '#7d8590', fontWeight: '400' }}>Sem despesas no periodo.</Text>
+          <Text style={{ color: c.muted, fontWeight: '400' }}>Sem despesas no período.</Text>
         ) : (
           ultimasDespesas.map((x) => (
             <Pressable
               key={x.id}
               onPress={() => navigation.navigate('EditarLancamento', { id: x.id })}
-              style={({ pressed }) => [
-                {
-                  borderWidth: 1,
-                  borderColor: '#21262d',
-                  borderRadius: 12,
-                  padding: 10,
-                  marginBottom: 8,
-                  backgroundColor: pressed ? 'rgba(255,255,255,0.03)' : '#161b22',
-                },
-              ]}
+              style={({ pressed }) => ({
+                borderWidth: 1,
+                borderColor: c.border,
+                borderRadius: 12,
+                padding: 10,
+                marginBottom: 8,
+                backgroundColor: pressed ? c.elevated : c.surface,
+              })}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#e6edf3', fontWeight: '600' }} numberOfLines={1}>
-                    {x.desc}
+                  <Text style={{ color: c.text, fontWeight: '600' }} numberOfLines={1}>{x.desc}</Text>
+                  <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 4 }} numberOfLines={1}>
+                    {x.dt} — {x.conta}
                   </Text>
-                  <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 4 }} numberOfLines={1}>
-                    {x.dt} - {x.conta}
-                  </Text>
-                  <Text style={{ color: '#7d8590', fontWeight: '400', fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                    {x.g} - {x.s}
+                  <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                    {x.g} — {x.s}
                   </Text>
                 </View>
-                <Text style={{ color: '#f87171', fontWeight: '600', fontSize: 13 }}>{formatMoney(x.v)}</Text>
+                <Text style={{ color: c.danger, fontWeight: '600', fontSize: 13 }}>{formatMoney(x.v)}</Text>
               </View>
             </Pressable>
           ))
         )}
       </Card>
+    </>
+  );
 
-      <View style={{ height: 18 }} />
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: c.bg }}
+      contentContainerStyle={{
+        padding: isWide ? 28 : 14,
+        paddingBottom: 40,
+        alignItems: isWide ? 'center' : undefined,
+      }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
+    >
+      <View style={{ width: '100%', maxWidth: maxW, alignSelf: isWide ? 'center' : undefined }}>
+        {isWide ? (
+          /* ── Layout 2 colunas (desktop) ── */
+          <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-start' }}>
+            <View style={{ flex: 1 }}>{leftColumn}</View>
+            <View style={{ flex: 1 }}>{rightColumn}</View>
+          </View>
+        ) : (
+          /* ── Layout 1 coluna (mobile) ── */
+          <>
+            {leftColumn}
+            <View style={{ height: 10 }} />
+            {rightColumn}
+          </>
+        )}
+        <View style={{ height: 18 }} />
+      </View>
     </ScrollView>
   );
 }
