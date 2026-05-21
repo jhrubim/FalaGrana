@@ -647,30 +647,6 @@ export default function RelatoriosScreen() {
     return m;
   }, [contas]);
 
-  const exportarCSV = useCallback(() => {
-    const label = mes !== null ? `${MESES_LONG[mes - 1]} ${ano}` : String(ano);
-    const linhas: LancamentoExport[] = listaDetalhada.map((l) => ({
-      data_despesa: l.data_despesa,
-      data_caixa: l.data_caixa,
-      descricao: l.descricao,
-      valor: l.valor,
-      tipo: l.tipo,
-      grupo: l.grupo,
-      subgrupo: l.subgrupo,
-      status: l.status,
-      contaNome: mapaContas.get(l.conta_id ?? '') ?? '',
-    }));
-    const csv = gerarCSV(linhas, label);
-    const nomeArquivo = `falagram_${label.replace(/\s/g, '_').toLowerCase()}.csv`;
-
-    if (Platform.OS === 'web') {
-      const ok = baixarCSV(csv, nomeArquivo);
-      if (!ok) Alert.alert('Erro', 'Não foi possível gerar o arquivo.');
-    } else {
-      Share.share({ message: csv, title: nomeArquivo }).catch(() => {});
-    }
-  }, [listaDetalhada, mapaContas, mes, ano]);
-
   const transferencias = useMemo(() => {
     return lancPeriodo
       .filter((l) => l.tipo === 'transferencia')
@@ -711,6 +687,30 @@ export default function RelatoriosScreen() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [listaDetalhada]);
+
+  const exportarCSV = useCallback(() => {
+    const label = mes !== null ? `${MESES_LONG[mes - 1]} ${ano}` : String(ano);
+    const linhas: LancamentoExport[] = listaDetalhada.map((l) => ({
+      data_despesa: l.data_despesa,
+      data_caixa: l.data_caixa,
+      descricao: l.descricao,
+      valor: l.valor,
+      tipo: l.tipo,
+      grupo: l.grupo,
+      subgrupo: l.subgrupo,
+      status: l.status,
+      contaNome: mapaContas.get(l.conta_id ?? '') ?? '',
+    }));
+    const csv = gerarCSV(linhas, label);
+    const nomeArquivo = `falagram_${label.replace(/\s/g, '_').toLowerCase()}.csv`;
+
+    if (Platform.OS === 'web') {
+      const ok = baixarCSV(csv, nomeArquivo);
+      if (!ok) Alert.alert('Erro', 'Não foi possível gerar o arquivo.');
+    } else {
+      Share.share({ message: csv, title: nomeArquivo }).catch(() => {});
+    }
+  }, [listaDetalhada, mapaContas, mes, ano]);
 
   const abrirDrillDown = useCallback((grupo: string, subgrupo: string) => {
     const pad = (n: number) => String(n).padStart(2, '0');
