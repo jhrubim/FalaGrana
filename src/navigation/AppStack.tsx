@@ -5,6 +5,7 @@ import AppTabs from './AppTabs';
 import LancamentoManualScreen from '../screens/lancamentos/LancamentoManualScreen';
 import EditarLancamentoScreen from '../screens/lancamentos/EditarLancamentoScreen';
 import PreviewImportacaoScreen from '../screens/importacao/PreviewImportacaoScreen';
+import DrillDownLancamentosScreen from '../screens/relatorios/DrillDownLancamentosScreen';
 import ContasCartoesScreen from '../screens/mais/ContasCartoesScreen';
 import CategoriasScreen from '../screens/mais/CategoriasScreen';
 import CategoriasRegrasScreen from '../screens/mais/CategoriasRegrasScreen';
@@ -15,6 +16,12 @@ export type AppStackParamList = {
   NovoLancamento: undefined;
   EditarLancamento: { id: string };
   PreviewImportacao: undefined;
+  DrillDownLancamentos: {
+    items: any[];
+    titulo: string;
+    subtitulo: string;
+    contaNomes: Record<string, string>;
+  };
   ContasCartoes: undefined;
   Categorias: undefined;
   CategoriasRegras: undefined;
@@ -44,6 +51,12 @@ export default function AppStack() {
         name="PreviewImportacao"
         component={PreviewImportacaoScreen}
         options={{ title: 'Preview da importação' }}
+      />
+
+      <Stack.Screen
+        name="DrillDownLancamentos"
+        component={DrillDownLancamentosScreen}
+        options={{ title: 'Detalhe' }}
       />
 
       <Stack.Screen

@@ -713,13 +713,29 @@ export default function RelatoriosScreen() {
   }, [listaDetalhada, mapaContas, mes, ano]);
 
   const abrirDrillDown = useCallback((grupo: string, subgrupo: string) => {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const dataInicio = mes !== null ? `${ano}-${pad(mes)}-01` : `${ano}-01-01`;
-    const lastDay = mes !== null ? diasNoMes(ano, mes) : 31;
-    const dataFim = mes !== null ? `${ano}-${pad(mes)}-${pad(lastDay)}` : `${ano}-12-31`;
-    const filtroContaId = contaId !== 'todas' ? contaId : undefined;
-    navigation.navigate('Lancamentos', { prefill: { filtroGrupo: grupo, filtroSubgrupo: subgrupo, filtroTipo: 'despesa', dataInicio, dataFim, basePeriodo, filtroContaId } });
-  }, [navigation, ano, mes, basePeriodo, contaId]);
+    const norm = (s?: string | null) =>
+      (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+
+    const itens = lancPeriodo.filter((l) => {
+      if (l.tipo !== 'despesa') return false;
+      const grupoOk = norm(l.grupo) === norm(grupo);
+      const subgrupoOk = !subgrupo || norm(l.subgrupo) === norm(subgrupo);
+      return grupoOk && subgrupoOk;
+    });
+
+    const contaNomes: Record<string, string> = {};
+    mapaContas.forEach((nome, id) => { contaNomes[id] = nome; });
+
+    const mesLabel = mes !== null ? `${MESES_LONG[mes - 1]} ${ano}` : String(ano);
+    const titulo = subgrupo ? `${grupo} › ${subgrupo}` : grupo;
+
+    navigation.navigate('DrillDownLancamentos', {
+      items: itens,
+      titulo,
+      subtitulo: mesLabel,
+      contaNomes,
+    });
+  }, [navigation, lancPeriodo, mapaContas, mes, ano]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
