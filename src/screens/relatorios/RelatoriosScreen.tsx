@@ -323,7 +323,7 @@ export default function RelatoriosScreen() {
 
   const [ano, setAno] = useState(anoAtual);
   const [mes, setMes] = useState<number | null>(mesAtual);
-  const [contaId, setContaId] = useState<string>('todas');
+  const [contaIds, setContaIds] = useState<string[]>([]);
   const [mostrarReceita, setMostrarReceita] = useState(false);
   const [basePeriodo, setBasePeriodo] = useState<'despesa' | 'caixa'>('despesa');
   const [listaAberta, setListaAberta] = useState(false);
@@ -440,10 +440,16 @@ export default function RelatoriosScreen() {
     return (l.data_despesa || '').slice(0, 7);
   }, [basePeriodo]);
 
+  const toggleConta = useCallback((id: string) => {
+    setContaIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
   const lancConta = useMemo(() => {
-    if (contaId === 'todas') return lancamentos;
-    return lancamentos.filter((l) => l.conta_id === contaId);
-  }, [lancamentos, contaId]);
+    if (contaIds.length === 0) return lancamentos;
+    return lancamentos.filter((l) => l.conta_id != null && contaIds.includes(l.conta_id));
+  }, [lancamentos, contaIds]);
 
   const chaveAtual = useMemo(() => {
     if (mes === null) return null;
@@ -832,9 +838,9 @@ export default function RelatoriosScreen() {
           <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: fg.colors.border }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={{ flexDirection: 'row' }}>
-                <Chip label="Todas as contas" active={contaId === 'todas'} onPress={() => setContaId('todas')} />
+                <Chip label="Todas" active={contaIds.length === 0} onPress={() => setContaIds([])} />
                 {contas.map((c) => (
-                  <Chip key={c.id} label={c.nome} active={contaId === c.id} onPress={() => setContaId(c.id)} />
+                  <Chip key={c.id} label={c.nome} active={contaIds.includes(c.id)} onPress={() => toggleConta(c.id)} />
                 ))}
               </View>
             </ScrollView>
