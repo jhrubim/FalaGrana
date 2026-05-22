@@ -47,6 +47,7 @@ type Conta = { id: string; nome: string; tipo?: string | null };
 type FiltroStatus = 'todos' | 'confirmada' | 'pendente';
 type FiltroTipo = 'todos' | 'despesa' | 'receita' | 'transferencia';
 type PeriodoMode = 'hoje' | 'semana' | 'mes' | 'mes_ant' | '3meses' | 'custom' | 'todos';
+type OrdenacaoLanc = 'data_desc' | 'data_asc' | 'valor_desc' | 'valor_asc' | 'desc_asc';
 
 type Prefill = {
   dataInicio?: string;
@@ -342,6 +343,8 @@ export default function LancamentosScreen() {
 
   const [basePeriodo, setBasePeriodo] = useState<'despesa' | 'caixa'>('despesa');
 
+  const [ordenacao, setOrdenacao] = useState<OrdenacaoLanc>('data_desc');
+
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
@@ -488,10 +491,15 @@ export default function LancamentosScreen() {
       });
     }
 
-    return lista.sort((a, b) =>
-      parseDateSafe(b.data_despesa || b.created_at) - parseDateSafe(a.data_despesa || a.created_at)
-    );
-  }, [lancamentos, dataInicio, dataFim, filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, busca, mapaContas, getDataFiltro]);
+    return lista.sort((a, b) => {
+      if (ordenacao === 'valor_desc') return Math.abs(Number(b.valor || 0)) - Math.abs(Number(a.valor || 0));
+      if (ordenacao === 'valor_asc')  return Math.abs(Number(a.valor || 0)) - Math.abs(Number(b.valor || 0));
+      if (ordenacao === 'desc_asc')   return normText(a.descricao).localeCompare(normText(b.descricao));
+      const da = parseDateSafe(a.data_despesa || a.created_at);
+      const db = parseDateSafe(b.data_despesa || b.created_at);
+      return ordenacao === 'data_asc' ? da - db : db - da;
+    });
+  }, [lancamentos, dataInicio, dataFim, filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, busca, mapaContas, getDataFiltro, ordenacao]);
 
   const grupos = useMemo(() => {
     const map = new Map<string, { items: Lancamento[]; receita: number; despesa: number }>();
@@ -519,6 +527,8 @@ export default function LancamentosScreen() {
     return { receita, despesa, saldo: receita - despesa, n: lancamentosFiltrados.length };
   }, [lancamentosFiltrados]);
 
+  const modoFlat = ordenacao !== 'data_desc' && ordenacao !== 'data_asc';
+
   const filtrosAtivos = useMemo(() => {
     let n = 0;
     if (filtroTipo !== 'todos') n++;
@@ -527,8 +537,9 @@ export default function LancamentosScreen() {
     if (filtroGrupo.trim()) n++;
     if (filtroSubgrupo.trim()) n++;
     if (basePeriodo !== 'despesa') n++;
+    if (ordenacao !== 'data_desc') n++;
     return n;
-  }, [filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, basePeriodo]);
+  }, [filtroTipo, filtroStatus, filtroContaId, filtroGrupo, filtroSubgrupo, basePeriodo, ordenacao]);
 
   // ── Ações ──────────────────────────────────────────────────────────────────
 
@@ -543,6 +554,7 @@ export default function LancamentosScreen() {
     setCustomIni('');
     setCustomFim('');
     setBasePeriodo('despesa');
+    setOrdenacao('data_desc');
   };
 
   const executarExclusao = async (item: Lancamento) => {
@@ -737,6 +749,19 @@ export default function LancamentosScreen() {
               ))}
             </View>
 
+            <Text style={[styles.filtroLabel, { marginTop: 10 }]}>ORDENAR POR</Text>
+            <View style={styles.chipRow}>
+              {([
+                { value: 'data_desc', label: 'Data ↓' },
+                { value: 'data_asc',  label: 'Data ↑' },
+                { value: 'valor_desc', label: 'Valor ↓' },
+                { value: 'valor_asc',  label: 'Valor ↑' },
+                { value: 'desc_asc',   label: 'Nome A→Z' },
+              ] as const).map((o) => (
+                <FiltroChip key={o.value} label={o.label} active={ordenacao === o.value} onPress={() => setOrdenacao(o.value)} />
+              ))}
+            </View>
+
             {(filtroGrupo.trim() || filtroSubgrupo.trim()) && (
               <>
                 <Text style={[styles.filtroLabel, { marginTop: 10 }]}>CATEGORIA (DRILL)</Text>
@@ -749,12 +774,32 @@ export default function LancamentosScreen() {
           </View>
         )}
 
-        {/* ── Lista agrupada ────────────────────────────────────── */}
-        {grupos.length === 0 ? (
+        {/* ── Lista ─────────────────────────────────────────────── */}
+        {lancamentosFiltrados.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📭</Text>
             <Text style={styles.emptyTitle}>Nenhum lançamento</Text>
             <Text style={styles.emptyDesc}>Ajuste os filtros ou adicione um novo lançamento.</Text>
+          </View>
+        ) : modoFlat ? (
+          <View style={styles.card}>
+            {lancamentosFiltrados.map((item, idx) => {
+              const conta = item.conta_id ? (mapaContas.get(item.conta_id)?.nome || 'Conta') : 'Conta';
+              const key = item.transferencia_id || item.id;
+              return (
+                <View key={item.id}>
+                  <LancamentoRow
+                    item={item}
+                    conta={conta}
+                    onPress={() => navigation.navigate('EditarLancamento', { id: item.id })}
+                    onDelete={() => { if (!deletingKey) confirmarExclusao(item); }}
+                    isDeleting={deletingKey === key}
+                    isViewer={isViewer}
+                  />
+                  {idx < lancamentosFiltrados.length - 1 && <View style={styles.divider} />}
+                </View>
+              );
+            })}
           </View>
         ) : (
           grupos.map((grupo) => (
