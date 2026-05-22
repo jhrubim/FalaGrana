@@ -603,13 +603,17 @@ export default function DashboardScreen() {
   }, []);
 
   const carregarSaldosPorConta = useCallback(
-    async (grupoId: string) => {
-      // saldo por conta é “saldo real” => inclui transferências (pois alteram saldo individual)
+    async (grupoId: string, contaList: Conta[]) => {
+      // Cartão: usa data_despesa (quando gastou) — inclui fatura ainda não vencida
+      // Banco/outros: usa data_caixa (quando liquidou)
+      const cartaoIds = new Set(
+        contaList.filter((c) => (c.tipo || '').toLowerCase() === 'cartao').map((c) => c.id)
+      );
+
       const { data, error } = await supabase
         .from('transacoes')
-        .select('conta_id, valor, tipo, status, data_caixa')
+        .select('conta_id, valor, tipo, status, data_caixa, data_despesa')
         .eq('grupo_id', grupoId)
-        .lte('data_caixa', hojeYmd)
         .or('status.eq.confirmada,status.is.null')
         .limit(20000);
 
@@ -621,6 +625,13 @@ export default function DashboardScreen() {
         const cid = r?.conta_id;
         if (!cid) return;
 
+        const isCartao = cartaoIds.has(cid);
+        const dataRef = isCartao
+          ? (r?.data_despesa || r?.data_caixa || '').slice(0, 10)
+          : (r?.data_caixa || r?.data_despesa || '').slice(0, 10);
+
+        if (!dataRef || dataRef > hojeYmd) return;
+
         const raw = Number(r?.valor || 0);
         const t = String(r?.tipo || '').toLowerCase();
 
@@ -628,7 +639,6 @@ export default function DashboardScreen() {
         if (t === 'despesa') signed = -Math.abs(raw);
         else if (t === 'receita') signed = Math.abs(raw);
         else if (t === 'transferencia') signed = raw;
-        else signed = 0;
 
         m[cid] = (m[cid] || 0) + signed;
 
@@ -726,9 +736,9 @@ export default function DashboardScreen() {
       const grupo = await carregarGrupoAtivo();
       setGrupoAtivo(grupo);
 
+      const contaList = await carregarContas(grupo.grupo_id);
       await Promise.all([
-        carregarContas(grupo.grupo_id),
-        carregarSaldosPorConta(grupo.grupo_id),
+        carregarSaldosPorConta(grupo.grupo_id, contaList),
         carregarTransacoesPeriodo(grupo.grupo_id),
       ]);
     } catch (e: any) {
