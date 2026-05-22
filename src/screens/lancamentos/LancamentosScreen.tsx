@@ -58,6 +58,7 @@ type Prefill = {
   filtroGrupo?: string;
   filtroSubgrupo?: string;
   busca?: string;
+  basePeriodo?: 'despesa' | 'caixa';
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -446,6 +447,7 @@ export default function LancamentosScreen() {
       if (prefill.dataInicio) setCustomIni(prefill.dataInicio);
       if (prefill.dataFim) setCustomFim(prefill.dataFim);
     }
+    if (prefill.basePeriodo) setBasePeriodo(prefill.basePeriodo);
     appliedPrefillRef.current = true;
   }, [prefill]);
 
