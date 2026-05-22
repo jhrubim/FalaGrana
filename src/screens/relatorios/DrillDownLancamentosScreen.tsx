@@ -35,11 +35,18 @@ function formatMoney(v?: number | null) {
   return Math.abs(Number(v || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const MESES_CURTOS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+
+function parseDateParts(s: string | null | undefined) {
+  if (!s) return null;
+  const dia = s.slice(8, 10);
+  const mes = parseInt(s.slice(5, 7), 10) - 1;
+  return { dia, mes: MESES_CURTOS[mes] ?? '' };
+}
+
 function formatData(s: string | null | undefined) {
   if (!s) return '';
-  const d = s.slice(8, 10);
-  const m = s.slice(5, 7);
-  return `${d}/${m}`;
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}`;
 }
 
 export default function DrillDownLancamentosScreen() {
@@ -116,6 +123,8 @@ export default function DrillDownLancamentosScreen() {
               const conta = item.conta_id ? (contaNomes[item.conta_id] ?? '') : '';
               const cat = [item.grupo, item.subgrupo].filter(Boolean).join(' › ') || conta;
               const isPendente = (item.status || 'confirmada') === 'pendente';
+              const dateParts = parseDateParts(item.data_despesa);
+              const temCaixa = item.data_caixa && item.data_caixa !== item.data_despesa;
               return (
                 <View key={item.id}>
                   <Pressable
@@ -123,13 +132,10 @@ export default function DrillDownLancamentosScreen() {
                     style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                     accessibilityLabel={item.descricao ?? 'Lançamento'}
                   >
-                    <View style={[styles.tipoIcon, {
-                      backgroundColor: isReceita ? fg.colors.accentSoft : fg.colors.dangerSoft,
-                      borderColor: isReceita ? fg.colors.accent : fg.colors.danger,
-                    }]}>
-                      <Text style={{ color: isReceita ? fg.colors.accent : fg.colors.danger, fontSize: 15, fontWeight: '700' }}>
-                        {isReceita ? '+' : '−'}
-                      </Text>
+                    {/* Bloco de data estilo calendário */}
+                    <View style={styles.dateBlock}>
+                      <Text style={styles.dateDay}>{dateParts?.dia ?? '--'}</Text>
+                      <Text style={styles.dateMes}>{dateParts?.mes ?? ''}</Text>
                     </View>
 
                     <View style={{ flex: 1 }}>
@@ -141,14 +147,11 @@ export default function DrillDownLancamentosScreen() {
                       </View>
                       <View style={styles.rowBottom}>
                         <Text style={styles.rowMeta} numberOfLines={1}>{cat || conta}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                           {isPendente && <View style={styles.pendenteDot} />}
-                          <Text style={styles.rowData}>
-                            {formatData(item.data_despesa)}
-                            {item.data_caixa && item.data_caixa !== item.data_despesa
-                              ? ` · cx ${formatData(item.data_caixa)}`
-                              : ''}
-                          </Text>
+                          {temCaixa && (
+                            <Text style={styles.rowCaixa}>cx {formatData(item.data_caixa)}</Text>
+                          )}
                         </View>
                       </View>
                     </View>
@@ -182,10 +185,18 @@ const styles = StyleSheet.create({
 
   card: { backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border, borderRadius: fg.radius.md, overflow: 'hidden' },
 
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 11, gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 10 },
   rowPressed: { backgroundColor: 'rgba(74,222,128,0.05)' },
 
-  tipoIcon: { width: 34, height: 34, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  dateBlock: {
+    width: 40, minHeight: 40, borderRadius: 10,
+    backgroundColor: fg.colors.surface2,
+    borderWidth: 1, borderColor: fg.colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  dateDay: { color: fg.colors.text, fontSize: 16, fontWeight: '700', lineHeight: 18 },
+  dateMes: { color: fg.colors.accent, fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
 
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   rowDesc: { flex: 1, color: fg.colors.text, fontSize: 13, fontWeight: '500' },
@@ -193,11 +204,11 @@ const styles = StyleSheet.create({
 
   rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 },
   rowMeta: { flex: 1, color: fg.colors.muted, fontSize: 11 },
-  rowData: { color: fg.colors.muted, fontSize: 11 },
+  rowCaixa: { color: fg.colors.muted, fontSize: 10, fontStyle: 'italic' },
 
   pendenteDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#f6c453' },
 
-  divider: { height: 1, backgroundColor: fg.colors.border, marginLeft: 56 },
+  divider: { height: 1, backgroundColor: fg.colors.border, marginLeft: 62 },
 
   empty: { paddingVertical: 40, alignItems: 'center' },
   emptyText: { color: fg.colors.muted, fontSize: 14 },
