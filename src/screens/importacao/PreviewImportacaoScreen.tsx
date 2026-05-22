@@ -844,10 +844,90 @@ export default function PreviewImportacaoScreen() {
       return;
     }
 
-    totalRef.current = registrosFinal.length;
-    safeSetState(() => setProgresso({ done: 0, total: registrosFinal.length }));
+    // ── Matching com lançamentos pendentes de voz ──────────────────────────────
+    // Busca entradas origem='voz', status='pendente' do período ± 5 dias
+    const dataPadded = (base: string, dias: number) => {
+      const d = new Date(base + 'T12:00:00');
+      d.setDate(d.getDate() + dias);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const { data: vozPendentes } = await supabase
+      .from('transacoes')
+      .select('id, tipo, valor, data_despesa')
+      .eq('grupo_id', (payload as any).grupoId)
+      .eq('origem', 'voz')
+      .eq('status', 'pendente')
+      .gte('data_despesa', dataPadded(dataMin, -7))
+      .lte('data_despesa', dataPadded(dataMax, 7));
 
-    const blocos = chunkArray(registrosFinal, 200);
+    const vozDisponivel = [...(vozPendentes || [])];
+    const vozAtualizacoes: Array<{ id: string; patch: Record<string, unknown> }> = [];
+    const indicesToRemover = new Set<number>();
+
+    for (let ri = 0; ri < registrosFinal.length; ri++) {
+      const r = registrosFinal[ri] as any;
+      const bestIdx = vozDisponivel.findIndex((v) => {
+        if (!v.tipo || v.tipo !== r.tipo) return false;
+        const valDiff = Math.abs(Number(v.valor || 0) - Number(r.valor || 0));
+        const valOk = Number(r.valor || 0) > 0 && valDiff / Number(r.valor) <= 0.15;
+        if (!valOk) return false;
+        const dtV = new Date((v.data_despesa ?? '') + 'T12:00:00').getTime();
+        const dtR = new Date((r.data_despesa ?? '') + 'T12:00:00').getTime();
+        const daysDiff = Math.abs(dtV - dtR) / 86400000;
+        return daysDiff <= 5;
+      });
+
+      if (bestIdx !== -1) {
+        const voz = vozDisponivel[bestIdx];
+        vozAtualizacoes.push({
+          id: voz.id,
+          patch: {
+            categoria_id: r.categoria_id,
+            grupo: r.grupo,
+            subgrupo: r.subgrupo,
+            descricao: r.descricao,
+            descricao_normalizada: r.descricao_normalizada,
+            valor: r.valor,
+            data_despesa: r.data_despesa,
+            data_caixa: r.data_caixa,
+            conta_id: r.conta_id,
+            status: 'confirmada',
+            origem: 'voz+importacao',
+          },
+        });
+        vozDisponivel.splice(bestIdx, 1);
+        indicesToRemover.add(ri);
+      }
+    }
+
+    // Remove itens que foram resolvidos pela voz (já não precisam ser inseridos)
+    const registrosParaInserir = registrosFinal.filter((_, i) => !indicesToRemover.has(i));
+
+    // Atualiza os lançamentos de voz em paralelo
+    if (vozAtualizacoes.length > 0) {
+      await Promise.all(
+        vozAtualizacoes.map(({ id, patch }) =>
+          supabase.from('transacoes').update(patch as any).eq('id', id)
+        )
+      );
+    }
+
+    const totalEfetivo = registrosParaInserir.length + vozAtualizacoes.length;
+    if (!registrosParaInserir.length && !vozAtualizacoes.length) {
+      alertar('Nada novo para importar', 'Todos os lançamentos já existiam.');
+      navBypassRef.current = true;
+      safeSetState(() => setSalvando(false));
+      clearImportacaoPreviewPayload();
+      try { DeviceEventEmitter.emit('FG_REFRESH_ALL', { ts: Date.now(), origem: 'importacao' }); } catch {}
+      navigation.goBack();
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    totalRef.current = registrosParaInserir.length;
+    safeSetState(() => setProgresso({ done: vozAtualizacoes.length, total: totalEfetivo }));
+
+    const blocos = chunkArray(registrosParaInserir, 200);
 
     for (let i = 0; i < blocos.length; i++) {
       if (cancelRef.current) throw new Error('__CANCEL__');
@@ -880,9 +960,12 @@ export default function PreviewImportacaoScreen() {
       if (cancelRef.current) throw new Error('__CANCEL__');
     }
 
+    const vozMsg = vozAtualizacoes.length > 0
+      ? `\n🎤 ${vozAtualizacoes.length} lançamento(s) de voz confirmados.`
+      : '';
     alertar(
       'Importação concluída',
-      `${registrosFinal.length} lançamentos importados.\nDuplicados evitados: ${removidosNoLote + removidosPorExistencia}`
+      `${registrosParaInserir.length} lançamentos importados.\nDuplicados evitados: ${removidosNoLote + removidosPorExistencia}${vozMsg}`
     );
 
     navBypassRef.current = true;

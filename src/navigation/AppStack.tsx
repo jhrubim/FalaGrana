@@ -6,6 +6,7 @@ import LancamentoManualScreen from '../screens/lancamentos/LancamentoManualScree
 import EditarLancamentoScreen from '../screens/lancamentos/EditarLancamentoScreen';
 import PreviewImportacaoScreen from '../screens/importacao/PreviewImportacaoScreen';
 import DrillDownLancamentosScreen from '../screens/relatorios/DrillDownLancamentosScreen';
+import CapturarVozScreen from '../screens/voz/CapturarVozScreen';
 import ContasCartoesScreen from '../screens/mais/ContasCartoesScreen';
 import CategoriasScreen from '../screens/mais/CategoriasScreen';
 import CategoriasRegrasScreen from '../screens/mais/CategoriasRegrasScreen';
@@ -26,6 +27,7 @@ export type AppStackParamList = {
   Categorias: undefined;
   CategoriasRegras: undefined;
   Configuracoes: undefined;
+  CapturarVoz: undefined;
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -81,6 +83,12 @@ export default function AppStack() {
         name="Configuracoes"
         component={ConfiguracoesScreen}
         options={{ title: 'Configurações' }}
+      />
+
+      <Stack.Screen
+        name="CapturarVoz"
+        component={CapturarVozScreen}
+        options={{ title: 'Registrar por voz' }}
       />
     </Stack.Navigator>
   );

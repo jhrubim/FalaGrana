@@ -834,15 +834,24 @@ export default function LancamentosScreen() {
         </View>{/* /maxWidth wrapper */}
       </ScrollView>
 
-      {/* ── FAB ───────────────────────────────────────────────── */}
+      {/* ── FABs ──────────────────────────────────────────────── */}
       {!isViewer && (
-        <Pressable
-          onPress={() => navigation.navigate('NovoLancamento')}
-          style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }]}
-          accessibilityLabel="Novo lançamento"
-        >
-          <Text style={styles.fabLabel}>+</Text>
-        </Pressable>
+        <>
+          <Pressable
+            onPress={() => navigation.navigate('CapturarVoz')}
+            style={({ pressed }) => [styles.fabMic, pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }]}
+            accessibilityLabel="Registrar gasto por voz"
+          >
+            <Text style={styles.fabMicLabel}>🎤</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('NovoLancamento')}
+            style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }]}
+            accessibilityLabel="Novo lançamento"
+          >
+            <Text style={styles.fabLabel}>+</Text>
+          </Pressable>
+        </>
       )}
     </View>
   );
@@ -942,4 +951,16 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabLabel: { color: fg.colors.onLight, fontSize: 28, fontWeight: '400', lineHeight: 32 },
+
+  fabMic: {
+    position: 'absolute', bottom: 24, right: 88,
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: fg.colors.surface,
+    borderWidth: 1, borderColor: fg.colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25,
+    shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  fabMicLabel: { fontSize: 22, lineHeight: 26 },
 });
