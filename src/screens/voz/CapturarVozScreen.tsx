@@ -20,6 +20,7 @@ import { fg } from '../../theme/fgTheme';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EstadoMic = 'idle' | 'ouvindo' | 'processando' | 'revisando' | 'salvando';
+type Conta = { id: string; nome: string; tipo: string | null };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,10 @@ export default function CapturarVozScreen() {
   const [parsed, setParsed] = useState<VozParsed | null>(null);
   const [erroMic, setErroMic] = useState('');
 
+  // Contas
+  const [contas, setContas] = useState<Conta[]>([]);
+  const [contaId, setContaId] = useState<string | null>(null);
+
   // Campos editáveis pós-parse
   const [valor, setValor] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -73,6 +78,28 @@ export default function CapturarVozScreen() {
 
   const recRef = useRef<any>(null);
   const temSpeechAPI = Platform.OS === 'web' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  // ── Carregar contas ────────────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user?.id) return;
+      const { data: grupos } = await supabase
+        .from('grupo_membros')
+        .select('grupo_id')
+        .eq('user_id', authData.user.id)
+        .eq('status', 'ativo')
+        .limit(1);
+      const grupoId = grupos?.[0]?.grupo_id;
+      if (!grupoId) return;
+      const { data: contasData } = await supabase
+        .from('contas')
+        .select('id, nome, tipo')
+        .eq('grupo_id', grupoId)
+        .order('nome');
+      setContas((contasData || []) as Conta[]);
+    })();
+  }, []);
 
   const aplicarParsed = useCallback((p: VozParsed) => {
     setParsed(p);
@@ -172,13 +199,15 @@ export default function CapturarVozScreen() {
         data_caixa: data,
         grupo: grupo.trim() || null,
         subgrupo: subgrupo.trim() || null,
+        conta_id: contaId || null,
         status: 'pendente',
         origem: 'voz',
       });
 
       if (error) throw error;
 
-      const msg = `${formatMoney(valorNum)} — ${descricao}\nsalvo como pendente ✓`;
+      const contaNome = contas.find(c => c.id === contaId)?.nome;
+      const msg = `${formatMoney(valorNum)} — ${descricao}${contaNome ? `\n${contaNome}` : ''}\nsalvo como pendente ✓`;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Salvo!', msg);
 
@@ -192,11 +221,12 @@ export default function CapturarVozScreen() {
       setData(yyyyMmDd(new Date()));
       setGrupo('');
       setSubgrupo('');
+      setContaId(null);
     } catch (e: any) {
       Alert.alert('Erro', e?.message ?? 'Não foi possível salvar.');
       setEstado('revisando');
     }
-  }, [valor, descricao, data, grupo, subgrupo]);
+  }, [valor, descricao, data, grupo, subgrupo, contaId, contas]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -209,8 +239,43 @@ export default function CapturarVozScreen() {
       <View style={{ width: '100%', maxWidth: isDesktop ? 560 : undefined }}>
 
         {/* Título */}
-        <Text style={styles.titulo}>Registrar gasto</Text>
-        <Text style={styles.subtitulo}>Fale ou digite o que gastou — fica pendente até a importação confirmar.</Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.titulo}>Registrar gasto</Text>
+            <Text style={styles.subtitulo}>Fale ou digite — fica pendente até a importação confirmar.</Text>
+          </View>
+          <Pressable
+            onPress={() => navigation.navigate('PendentesVoz')}
+            style={styles.btnPendentes}
+            accessibilityLabel="Ver lançamentos pendentes"
+          >
+            <Text style={styles.btnPendentesText}>📋 Pendentes</Text>
+          </Pressable>
+        </View>
+
+        {/* ── Seleção de conta ──────────────────────────────────────── */}
+        {contas.length > 0 && (
+          <View style={styles.contaSection}>
+            <Text style={styles.contaLabel}>CONTA</Text>
+            <View style={styles.contaRow}>
+              {contas.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => setContaId(contaId === c.id ? null : c.id)}
+                  style={[styles.contaChip, contaId === c.id && styles.contaChipAtivo]}
+                  accessibilityLabel={c.nome}
+                >
+                  <Text style={[styles.contaChipText, contaId === c.id && styles.contaChipTextAtivo]}>
+                    {c.nome}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {!contaId && (
+              <Text style={styles.contaHint}>Selecione a conta para facilitar a conciliação</Text>
+            )}
+          </View>
+        )}
 
         {/* ── Área de microfone ─────────────────────────────────────── */}
         {temSpeechAPI && estado !== 'revisando' && estado !== 'salvando' && (
@@ -322,6 +387,27 @@ export default function CapturarVozScreen() {
               placeholderTextColor={fg.colors.muted}
             />
 
+            {/* Conta no formulário de revisão */}
+            {contas.length > 0 && (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>CONTA</Text>
+                <View style={styles.contaRow}>
+                  {contas.map((c) => (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setContaId(contaId === c.id ? null : c.id)}
+                      style={[styles.contaChip, contaId === c.id && styles.contaChipAtivo]}
+                      accessibilityLabel={c.nome}
+                    >
+                      <Text style={[styles.contaChipText, contaId === c.id && styles.contaChipTextAtivo]}>
+                        {c.nome}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+
             {(grupo || subgrupo) && (
               <>
                 <Text style={[styles.fieldLabel, { marginTop: 12 }]}>CATEGORIA SUGERIDA</Text>
@@ -394,8 +480,26 @@ export default function CapturarVozScreen() {
 const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 24, paddingBottom: 40 },
 
-  titulo: { color: fg.colors.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
-  subtitulo: { color: fg.colors.muted, fontSize: 13, lineHeight: 18, marginBottom: 24 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, gap: 10 },
+  titulo: { color: fg.colors.text, fontSize: 22, fontWeight: '700', marginBottom: 4 },
+  subtitulo: { color: fg.colors.muted, fontSize: 13, lineHeight: 18 },
+  btnPendentes: {
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+    borderRadius: fg.radius.md, paddingHorizontal: 10, paddingVertical: 7, marginTop: 2,
+  },
+  btnPendentesText: { color: fg.colors.muted, fontSize: 12, fontWeight: '600' },
+
+  contaSection: { marginBottom: 20 },
+  contaLabel: { color: fg.colors.muted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
+  contaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  contaChip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: fg.radius.pill,
+    backgroundColor: fg.colors.surface, borderWidth: 1, borderColor: fg.colors.border,
+  },
+  contaChipAtivo: { backgroundColor: fg.colors.accent, borderColor: fg.colors.accent },
+  contaChipText: { color: fg.colors.muted, fontSize: 13, fontWeight: '600' },
+  contaChipTextAtivo: { color: fg.colors.bg },
+  contaHint: { color: fg.colors.muted, fontSize: 11, marginTop: 6, fontStyle: 'italic' },
 
   micArea: { alignItems: 'center', marginBottom: 24 },
   micBtn: {
@@ -406,10 +510,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  micBtnOuvindo: {
-    backgroundColor: fg.colors.danger,
-    shadowColor: fg.colors.danger,
-  },
+  micBtnOuvindo: { backgroundColor: fg.colors.danger, shadowColor: fg.colors.danger },
   micIcon: { fontSize: 38 },
   micStatus: { marginTop: 14, color: fg.colors.muted, fontSize: 13, fontWeight: '500' },
 

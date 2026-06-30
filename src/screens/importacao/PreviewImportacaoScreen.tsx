@@ -853,13 +853,14 @@ export default function PreviewImportacaoScreen() {
     };
     const { data: vozPendentes } = await supabase
       .from('transacoes')
-      .select('id, tipo, valor, data_despesa')
+      .select('id, tipo, valor, data_despesa, conta_id')
       .eq('grupo_id', (payload as any).grupoId)
       .eq('origem', 'voz')
       .eq('status', 'pendente')
       .gte('data_despesa', dataPadded(dataMin, -7))
       .lte('data_despesa', dataPadded(dataMax, 7));
 
+    const contaImportacao = (payload as any).contaId as string;
     const vozDisponivel = [...(vozPendentes || [])];
     const vozAtualizacoes: Array<{ id: string; patch: Record<string, unknown> }> = [];
     const indicesToRemover = new Set<number>();
@@ -868,6 +869,8 @@ export default function PreviewImportacaoScreen() {
       const r = registrosFinal[ri] as any;
       const bestIdx = vozDisponivel.findIndex((v) => {
         if (!v.tipo || v.tipo !== r.tipo) return false;
+        // Se a captura de voz indicou uma conta, ela deve bater com a importação
+        if (v.conta_id && v.conta_id !== contaImportacao) return false;
         const valDiff = Math.abs(Number(v.valor || 0) - Number(r.valor || 0));
         const valOk = Number(r.valor || 0) > 0 && valDiff / Number(r.valor) <= 0.15;
         if (!valOk) return false;

@@ -7,6 +7,7 @@ import EditarLancamentoScreen from '../screens/lancamentos/EditarLancamentoScree
 import PreviewImportacaoScreen from '../screens/importacao/PreviewImportacaoScreen';
 import DrillDownLancamentosScreen from '../screens/relatorios/DrillDownLancamentosScreen';
 import CapturarVozScreen from '../screens/voz/CapturarVozScreen';
+import PendentesVozScreen from '../screens/voz/PendentesVozScreen';
 import ContasCartoesScreen from '../screens/mais/ContasCartoesScreen';
 import CategoriasScreen from '../screens/mais/CategoriasScreen';
 import CategoriasRegrasScreen from '../screens/mais/CategoriasRegrasScreen';
@@ -28,6 +29,7 @@ export type AppStackParamList = {
   CategoriasRegras: undefined;
   Configuracoes: undefined;
   CapturarVoz: undefined;
+  PendentesVoz: undefined;
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -89,6 +91,12 @@ export default function AppStack() {
         name="CapturarVoz"
         component={CapturarVozScreen}
         options={{ title: 'Registrar por voz' }}
+      />
+
+      <Stack.Screen
+        name="PendentesVoz"
+        component={PendentesVozScreen}
+        options={{ title: 'Pendentes de voz' }}
       />
     </Stack.Navigator>
   );
