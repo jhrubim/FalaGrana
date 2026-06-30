@@ -610,12 +610,14 @@ export default function DashboardScreen() {
         contaList.filter((c) => (c.tipo || '').toLowerCase() === 'cartao').map((c) => c.id)
       );
 
+      // Filtra no servidor por data para reduzir volume, depois refina em JS por conta tipo
       const { data, error } = await supabase
         .from('transacoes')
         .select('conta_id, valor, tipo, status, data_caixa, data_despesa')
         .eq('grupo_id', grupoId)
         .or('status.eq.confirmada,status.is.null')
-        .limit(20000);
+        .or(`data_caixa.lte.${hojeYmd},data_despesa.lte.${hojeYmd}`)
+        .range(0, 9999);
 
       if (error) throw new Error(`Não foi possível calcular saldos. (${error.message})`);
 
@@ -646,26 +648,6 @@ export default function DashboardScreen() {
         if (dc && dc > maxData) maxData = dc;
       });
 
-      // DEBUG TEMPORÁRIO — remover após diagnóstico
-      console.log('[saldos] total transações carregadas:', data?.length);
-      console.log('[saldos] por conta:', JSON.stringify(
-        Object.entries(m).map(([id, saldo]) => ({ id: id.slice(0, 8), saldo: saldo.toFixed(2) }))
-      ));
-      contaList.forEach(c => {
-        const s = m[c.id] || 0;
-        let receita = 0, despesa = 0, transf = 0, excluidos = 0;
-        (data || []).filter((r: any) => r.conta_id === c.id).forEach((r: any) => {
-          const isC = cartaoIds.has(c.id);
-          const dr = isC ? (r.data_despesa || r.data_caixa || '') : (r.data_caixa || r.data_despesa || '');
-          if (!dr || dr > hojeYmd) { excluidos++; return; }
-          const raw = Number(r.valor || 0);
-          if (r.tipo === 'receita') receita += raw;
-          else if (r.tipo === 'despesa') despesa += raw;
-          else if (r.tipo === 'transferencia') transf += raw;
-        });
-        console.log(`[saldos] ${c.nome}: saldo=${s.toFixed(2)} receita=${receita.toFixed(2)} despesa=${despesa.toFixed(2)} transf=${transf.toFixed(2)} excluidos=${excluidos}`);
-      });
-      // FIM DEBUG
       setSaldoPorConta(m);
       setDataUltimaTransacao(maxData);
     },
