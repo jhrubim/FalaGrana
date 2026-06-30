@@ -610,20 +610,28 @@ export default function DashboardScreen() {
         contaList.filter((c) => (c.tipo || '').toLowerCase() === 'cartao').map((c) => c.id)
       );
 
-      // Filtra no servidor por data para reduzir volume, depois refina em JS por conta tipo
-      const { data, error } = await supabase
-        .from('transacoes')
-        .select('conta_id, valor, tipo, status, data_caixa, data_despesa')
-        .eq('grupo_id', grupoId)
-        .or('status.eq.confirmada,status.is.null')
-        .or(`data_caixa.lte.${hojeYmd},data_despesa.lte.${hojeYmd}`)
-        .range(0, 9999);
+      // Pagina em blocos de 1000 até buscar todos (Supabase limita 1000/req por padrão)
+      const allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data: page, error } = await supabase
+          .from('transacoes')
+          .select('conta_id, valor, tipo, status, data_caixa, data_despesa')
+          .eq('grupo_id', grupoId)
+          .or('status.eq.confirmada,status.is.null')
+          .range(from, from + PAGE - 1);
 
-      if (error) throw new Error(`Não foi possível calcular saldos. (${error.message})`);
+        if (error) throw new Error(`Não foi possível calcular saldos. (${error.message})`);
+        if (!page || page.length === 0) break;
+        allData.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
 
       const m: Record<string, number> = {};
       let maxData = '';
-      (data || []).forEach((r: any) => {
+      allData.forEach((r: any) => {
         const cid = r?.conta_id;
         if (!cid) return;
 
@@ -653,6 +661,7 @@ export default function DashboardScreen() {
     },
     [hojeYmd]
   );
+
 
   const range = useMemo(() => {
     const end = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
