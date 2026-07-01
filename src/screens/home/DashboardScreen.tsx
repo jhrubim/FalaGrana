@@ -28,6 +28,7 @@ type Conta = {
   id: string;
   nome: string;
   tipo?: string | null; // banco | cartao | null
+  saldo_inicial?: number | null;
 };
 
 type Transacao = {
@@ -593,7 +594,7 @@ export default function DashboardScreen() {
   const carregarContas = useCallback(async (grupoId: string) => {
     const { data, error } = await supabase
       .from('contas')
-      .select('id, nome, tipo')
+      .select('id, nome, tipo, saldo_inicial')
       .eq('grupo_id', grupoId)
       .order('nome', { ascending: true });
 
@@ -629,7 +630,12 @@ export default function DashboardScreen() {
         from += PAGE;
       }
 
+      // Inicializa cada conta com saldo_inicial (se existir)
       const m: Record<string, number> = {};
+      contaList.forEach((c) => {
+        m[c.id] = Number(c.saldo_inicial || 0);
+      });
+
       let maxData = '';
       allData.forEach((r: any) => {
         const cid = r?.conta_id;
