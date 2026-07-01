@@ -4,7 +4,7 @@ import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/b
 import DashboardScreen from '../screens/home/DashboardScreen';
 import LancamentosScreen from '../screens/lancamentos/LancamentosScreen';
 import ImportarScreen from '../screens/importacao/ImportarScreen';
-import RelatoriosScreen from '../screens/relatorios/RelatoriosScreen';
+import AnaliseScreen from '../screens/analise/AnaliseScreen';
 import MaisScreen from '../screens/mais/MaisScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
@@ -12,7 +12,7 @@ export type AppTabsParamList = {
   Home: undefined;
   Lancamentos: undefined;
   Importar: undefined;
-  Relatorios: undefined;
+  Analise: undefined;
   Mais: undefined;
 };
 
@@ -26,7 +26,7 @@ const TAB_ITEMS: Array<{
   { name: 'Home',        label: 'Início',      icon: '⌂' },
   { name: 'Lancamentos', label: 'Lançamentos',  icon: '↕' },
   { name: 'Importar',    label: 'Importar',     icon: '↑' },
-  { name: 'Relatorios',  label: 'Relatórios',   icon: '▤' },
+  { name: 'Analise',     label: 'Análise',      icon: '◈' },
   { name: 'Mais',        label: 'Mais',         icon: '⋯' },
 ];
 
@@ -119,7 +119,7 @@ export default function AppTabs() {
       <Tab.Screen name="Home"        component={DashboardScreen}  options={{ title: 'Dashboard' }} />
       <Tab.Screen name="Lancamentos" component={LancamentosScreen} options={{ title: 'Lançamentos' }} />
       <Tab.Screen name="Importar"    component={ImportarScreen}   options={{ title: 'Importar' }} />
-      <Tab.Screen name="Relatorios"  component={RelatoriosScreen}  options={{ title: 'Relatórios' }} />
+      <Tab.Screen name="Analise"     component={AnaliseScreen}     options={{ title: 'Análise' }} />
       <Tab.Screen name="Mais"        component={MaisScreen}       options={{ title: 'Mais' }} />
     </Tab.Navigator>
   );
