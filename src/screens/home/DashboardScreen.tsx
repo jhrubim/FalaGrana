@@ -288,17 +288,21 @@ function HeroCard({
   walletName,
   onRefresh,
   refreshing,
+  projetado,
 }: {
   saldo: number;
   dataRef: string;
   walletName: string;
   onRefresh: () => void;
   refreshing: boolean;
+  projetado?: boolean;
 }) {
   const { colors: c } = useAppTheme();
   const isPos = saldo >= 0;
   const formatted = formatMoney(saldo);
-  const dataLabel = dataRef ? `Saldo bancário em ${ddmm(dataRef)}` : 'Saldo bancário';
+  const dataLabel = projetado
+    ? 'Saldo projetado (inclui pendentes)'
+    : dataRef ? `Saldo bancário em ${ddmm(dataRef)}` : 'Saldo bancário';
 
   return (
     <View
@@ -541,7 +545,8 @@ export default function DashboardScreen() {
 
   const [grupoAtivo, setGrupoAtivo] = useState<GrupoAtivo | null>(null);
   const [contas, setContas] = useState<Conta[]>([]);
-  const [saldoPorConta, setSaldoPorConta] = useState<Record<string, number>>({});
+  const [saldoPorContaConfirmado, setSaldoPorContaConfirmado] = useState<Record<string, number>>({});
+  const [saldoPorContaTotal, setSaldoPorContaTotal] = useState<Record<string, number>>({});
   const [dataUltimaTransacao, setDataUltimaTransacao] = useState<string>('');
 
   const [rangeMode, setRangeMode] = useState<RangeMode>('30d');
@@ -613,6 +618,7 @@ export default function DashboardScreen() {
       );
 
       // Pagina em blocos de 1000 até buscar todos (Supabase limita 1000/req por padrão)
+      // Busca todas (confirmadas + pendentes) para calcular os dois cenários de uma vez
       const allData: any[] = [];
       let from = 0;
       const PAGE = 1000;
@@ -621,7 +627,6 @@ export default function DashboardScreen() {
           .from('transacoes')
           .select('conta_id, valor, tipo, status, data_caixa, data_despesa')
           .eq('grupo_id', grupoId)
-          .or('status.eq.confirmada,status.is.null')
           .range(from, from + PAGE - 1);
 
         if (error) throw new Error(`Não foi possível calcular saldos. (${error.message})`);
@@ -632,9 +637,11 @@ export default function DashboardScreen() {
       }
 
       // Inicializa cada conta com saldo_inicial (se existir)
-      const m: Record<string, number> = {};
+      const mConfirmado: Record<string, number> = {};
+      const mTotal: Record<string, number> = {};
       contaList.forEach((c) => {
-        m[c.id] = Number(c.saldo_inicial || 0);
+        mConfirmado[c.id] = Number(c.saldo_inicial || 0);
+        mTotal[c.id] = Number(c.saldo_inicial || 0);
       });
 
       let maxData = '';
@@ -651,19 +658,27 @@ export default function DashboardScreen() {
 
         const raw = Number(r?.valor || 0);
         const t = String(r?.tipo || '').toLowerCase();
+        const isPendente = r?.status === 'pendente';
 
         let signed = 0;
         if (t === 'despesa') signed = -Math.abs(raw);
         else if (t === 'receita') signed = Math.abs(raw);
         else if (t === 'transferencia') signed = raw;
 
-        m[cid] = (m[cid] || 0) + signed;
+        // mTotal inclui tudo (confirmado + pendente)
+        mTotal[cid] = (mTotal[cid] || 0) + signed;
+
+        // mConfirmado só inclui status confirmada ou null
+        if (!isPendente) {
+          mConfirmado[cid] = (mConfirmado[cid] || 0) + signed;
+        }
 
         const dc = (r?.data_caixa || '').slice(0, 10);
         if (dc && dc > maxData) maxData = dc;
       });
 
-      setSaldoPorConta(m);
+      setSaldoPorContaConfirmado(mConfirmado);
+      setSaldoPorContaTotal(mTotal);
       setDataUltimaTransacao(maxData);
     },
     [hojeYmd]
@@ -805,6 +820,11 @@ export default function DashboardScreen() {
     contas.forEach((c) => m.set(c.id, c));
     return m;
   }, [contas]);
+
+  const saldoPorConta = useMemo(
+    () => includePendentes ? saldoPorContaTotal : saldoPorContaConfirmado,
+    [includePendentes, saldoPorContaTotal, saldoPorContaConfirmado]
+  );
 
   const saldosOrdenados = useMemo(() => {
     const list = contas.map((c) => ({
@@ -1074,10 +1094,11 @@ export default function DashboardScreen() {
       {/* Hero: saldo bancário */}
       <HeroCard
         saldo={saldoBancario}
-        dataRef={dataUltimaTransacao}
+        dataRef={includePendentes ? '' : dataUltimaTransacao}
         walletName={grupoAtivo?.nome_grupo || 'Minha Carteira'}
         onRefresh={carregarTela}
         refreshing={refreshing}
+        projetado={includePendentes}
       />
 
       {/* Resumo do mês — 3 chips rápidos */}
