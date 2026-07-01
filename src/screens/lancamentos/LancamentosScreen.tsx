@@ -241,6 +241,10 @@ function LancamentoRow({
   const isPendente = status === 'pendente';
 
   const cat = [item.grupo, item.subgrupo].filter(Boolean).join(' › ') || conta;
+  const dataStr = (item.data_despesa || item.data_caixa || '').slice(0, 10);
+  const dataLabel = dataStr
+    ? `${dataStr.slice(8, 10)}/${dataStr.slice(5, 7)}`
+    : '';
 
   return (
     <Pressable
@@ -274,7 +278,10 @@ function LancamentoRow({
           </Text>
         </View>
         <View style={styles.rowBottom}>
-          <Text style={styles.rowMeta} numberOfLines={1}>{cat}</Text>
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {dataLabel ? <Text style={{ color: fg.colors.accent, fontWeight: '600' }}>{dataLabel}</Text> : null}
+            {dataLabel && cat ? '  ·  ' : ''}{cat}
+          </Text>
           <View style={styles.rowStatusRow}>
             {isPendente && (
               <View style={styles.pendenteDot} />
