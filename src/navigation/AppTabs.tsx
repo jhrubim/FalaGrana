@@ -4,6 +4,7 @@ import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/b
 import DashboardScreen from '../screens/home/DashboardScreen';
 import LancamentosScreen from '../screens/lancamentos/LancamentosScreen';
 import ImportarScreen from '../screens/importacao/ImportarScreen';
+import RelatoriosScreen from '../screens/relatorios/RelatoriosScreen';
 import AnaliseScreen from '../screens/analise/AnaliseScreen';
 import MaisScreen from '../screens/mais/MaisScreen';
 import { useAppTheme } from '../context/ThemeContext';
@@ -12,6 +13,7 @@ export type AppTabsParamList = {
   Home: undefined;
   Lancamentos: undefined;
   Importar: undefined;
+  Relatorios: undefined;
   Analise: undefined;
   Mais: undefined;
 };
@@ -23,11 +25,12 @@ const TAB_ITEMS: Array<{
   label: string;
   icon: string;
 }> = [
-  { name: 'Home',        label: 'Início',      icon: '⌂' },
-  { name: 'Lancamentos', label: 'Lançamentos',  icon: '↕' },
-  { name: 'Importar',    label: 'Importar',     icon: '↑' },
-  { name: 'Analise',     label: 'Análise',      icon: '◈' },
-  { name: 'Mais',        label: 'Mais',         icon: '⋯' },
+  { name: 'Home',        label: 'Início',    icon: '⌂' },
+  { name: 'Lancamentos', label: 'Lançam.',   icon: '↕' },
+  { name: 'Importar',    label: 'Importar',  icon: '↑' },
+  { name: 'Relatorios',  label: 'Relatório', icon: '▤' },
+  { name: 'Analise',     label: 'Análise',   icon: '◈' },
+  { name: 'Mais',        label: 'Mais',      icon: '⋯' },
 ];
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -38,11 +41,11 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       backgroundColor: c.bg,
       borderTopWidth: 1,
       borderTopColor: c.border,
-      paddingHorizontal: 10,
+      paddingHorizontal: 8,
       paddingBottom: 8,
       paddingTop: 8,
     }}>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
+      <View style={{ flexDirection: 'row', gap: 4 }}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
@@ -67,24 +70,24 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
-                paddingVertical: 8,
-                borderRadius: 12,
+                paddingVertical: 7,
+                borderRadius: 10,
                 backgroundColor: isFocused ? c.elevated : c.surface,
                 borderWidth: 1,
                 borderColor: isFocused ? c.accent : c.border,
-                gap: 2,
+                gap: 1,
               }}
               accessibilityRole="button"
               accessibilityLabel={options.tabBarAccessibilityLabel ?? item?.label}
               accessibilityState={{ selected: isFocused }}
             >
-              <Text style={{ fontSize: 16, color: isFocused ? c.accent : c.muted }}>
+              <Text style={{ fontSize: 14, color: isFocused ? c.accent : c.muted }}>
                 {item?.icon ?? '•'}
               </Text>
               <Text style={{
-                fontSize: 9, fontWeight: '500',
+                fontSize: 8, fontWeight: '500',
                 color: isFocused ? c.accent : c.muted,
-                textTransform: 'uppercase', letterSpacing: 0.4,
+                textTransform: 'uppercase', letterSpacing: 0.3,
               }} numberOfLines={1}>
                 {item?.label ?? route.name}
               </Text>
@@ -119,7 +122,8 @@ export default function AppTabs() {
       <Tab.Screen name="Home"        component={DashboardScreen}  options={{ title: 'Dashboard' }} />
       <Tab.Screen name="Lancamentos" component={LancamentosScreen} options={{ title: 'Lançamentos' }} />
       <Tab.Screen name="Importar"    component={ImportarScreen}   options={{ title: 'Importar' }} />
-      <Tab.Screen name="Analise"     component={AnaliseScreen}     options={{ title: 'Análise' }} />
+      <Tab.Screen name="Relatorios"  component={RelatoriosScreen}  options={{ title: 'Relatórios' }} />
+      <Tab.Screen name="Analise"     component={AnaliseScreen}    options={{ title: 'Análise' }} />
       <Tab.Screen name="Mais"        component={MaisScreen}       options={{ title: 'Mais' }} />
     </Tab.Navigator>
   );
