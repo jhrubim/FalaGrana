@@ -792,6 +792,23 @@ export default function DashboardScreen() {
     }, [carregarTela, loading])
   );
 
+  // Troca período e dispara fetch imediatamente — sem depender de useEffect reativo
+  const aplicarPeriodo = useCallback((mode: RangeMode) => {
+    setRangeMode(mode);
+    const gid = grupoAtivo?.grupo_id;
+    if (!gid || mode === 'custom') return;
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let ini = '';
+    let fim = '';
+    if (mode === 'mes') { ini = ymd(startOfMonth(end)); fim = ymd(endOfMonth(end)); }
+    else if (mode === '30d') { ini = ymd(addDays(end, -29)); fim = ymd(end); }
+    else if (mode === '90d') { ini = ymd(addDays(end, -89)); fim = ymd(end); }
+    else if (mode === 'ano') { ini = ymd(startOfYear(end)); fim = ymd(end); }
+    // 'total': ini='', fim='' — sem filtro de data
+    carregarTransacoesPeriodo(gid, ini, fim);
+  }, [grupoAtivo?.grupo_id, carregarTransacoesPeriodo]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await carregarTela();
@@ -817,6 +834,9 @@ export default function DashboardScreen() {
       return;
     }
     setRangeMode('custom');
+    if (grupoAtivo?.grupo_id) {
+      carregarTransacoesPeriodo(grupoAtivo.grupo_id, customIni.trim(), customFim.trim());
+    }
   };
 
   const mapaContas = useMemo(() => {
@@ -1297,12 +1317,12 @@ export default function DashboardScreen() {
         <Text style={[styles.sectionTitle, { color: c.muted }]}>Período</Text>
         <View style={{ height: 8 }} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <Chip label="Este mês" active={rangeMode === 'mes'} onPress={() => setRangeMode('mes')} />
-          <Chip label="30 dias" active={rangeMode === '30d'} onPress={() => setRangeMode('30d')} />
-          <Chip label="90 dias" active={rangeMode === '90d'} onPress={() => setRangeMode('90d')} />
-          <Chip label="Este ano" active={rangeMode === 'ano'} onPress={() => setRangeMode('ano')} />
-          <Chip label="Todo período" active={rangeMode === 'total'} onPress={() => setRangeMode('total')} />
-          <Chip label="Personalizado" active={rangeMode === 'custom'} onPress={() => setRangeMode('custom')} />
+          <Chip label="Este mês" active={rangeMode === 'mes'} onPress={() => aplicarPeriodo('mes')} />
+          <Chip label="30 dias" active={rangeMode === '30d'} onPress={() => aplicarPeriodo('30d')} />
+          <Chip label="90 dias" active={rangeMode === '90d'} onPress={() => aplicarPeriodo('90d')} />
+          <Chip label="Este ano" active={rangeMode === 'ano'} onPress={() => aplicarPeriodo('ano')} />
+          <Chip label="Todo período" active={rangeMode === 'total'} onPress={() => aplicarPeriodo('total')} />
+          <Chip label="Personalizado" active={rangeMode === 'custom'} onPress={() => aplicarPeriodo('custom')} />
         </View>
 
         {rangeMode === 'custom' ? (
