@@ -747,17 +747,14 @@ export default function DashboardScreen() {
     [hojeYmd]
   );
 
+  // Carrega grupo, contas e saldos (sem transações — período independente)
   const carregarTela = useCallback(async () => {
     setErroTela(null);
     try {
       const grupo = await carregarGrupoAtivo();
       setGrupoAtivo(grupo);
-
       const contaList = await carregarContas(grupo.grupo_id);
-      await Promise.all([
-        carregarSaldosPorConta(grupo.grupo_id, contaList),
-        carregarTransacoesPeriodo(grupo.grupo_id, range.ini, range.fim),
-      ]);
+      await carregarSaldosPorConta(grupo.grupo_id, contaList);
     } catch (e: any) {
       console.log('ERRO DASHBOARD carregarTela:', e);
       setErroTela(e?.message || 'Erro ao carregar dashboard.');
@@ -765,9 +762,14 @@ export default function DashboardScreen() {
       setContas([]);
       setSaldoPorContaConfirmado({});
       setSaldoPorContaTotal({});
-      setTransacoesPeriodo([]);
     }
-  }, [carregarGrupoAtivo, carregarContas, carregarSaldosPorConta, carregarTransacoesPeriodo, range.ini, range.fim]);
+  }, [carregarGrupoAtivo, carregarContas, carregarSaldosPorConta]);
+
+  // Carrega transações sempre que o grupo ou período mudam
+  useEffect(() => {
+    if (!grupoAtivo?.grupo_id) return;
+    carregarTransacoesPeriodo(grupoAtivo.grupo_id, range.ini, range.fim);
+  }, [grupoAtivo?.grupo_id, range.ini, range.fim, carregarTransacoesPeriodo]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', () => carregarTela());
@@ -781,9 +783,7 @@ export default function DashboardScreen() {
       await carregarTela();
       if (alive) setLoading(false);
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [carregarTela]);
 
   useFocusEffect(
@@ -795,8 +795,11 @@ export default function DashboardScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await carregarTela();
+    if (grupoAtivo?.grupo_id) {
+      await carregarTransacoesPeriodo(grupoAtivo.grupo_id, range.ini, range.fim);
+    }
     setRefreshing(false);
-  }, [carregarTela]);
+  }, [carregarTela, grupoAtivo?.grupo_id, range.ini, range.fim, carregarTransacoesPeriodo]);
 
   const aplicarCustom = () => {
     const ini = parseYmd(customIni);
