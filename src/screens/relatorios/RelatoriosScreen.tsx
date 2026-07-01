@@ -356,34 +356,45 @@ export default function RelatoriosScreen() {
     const start = `${anoRef}-01-01`;
     const end = `${anoRef}-12-31`;
     const select = 'id, data_despesa, data_caixa, descricao, valor, tipo, grupo, subgrupo, conta_id, status';
+    const PAGE = 1000;
+
+    async function fetchAll(builder: any): Promise<Lancamento[]> {
+      const all: Lancamento[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await builder.range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
 
     let rows: Lancamento[];
     if (base === 'caixa') {
-      const [contasRes, comCaixa, semCaixa] = await Promise.all([
-        supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome'),
-        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
-          .in('tipo', ['despesa', 'receita', 'transferencia'])
-          .not('data_caixa', 'is', null).gte('data_caixa', start).lte('data_caixa', end).limit(12000),
-        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
-          .in('tipo', ['despesa', 'receita', 'transferencia'])
-          .is('data_caixa', null).gte('data_despesa', start).lte('data_despesa', end).limit(4000),
-      ]);
+      const contasRes = await supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome');
       if (contasRes.error) throw new Error(contasRes.error.message);
-      if (comCaixa.error) throw new Error(comCaixa.error.message);
-      if (semCaixa.error) throw new Error(semCaixa.error.message);
       setContas((contasRes.data || []) as Conta[]);
-      rows = [...((comCaixa.data || []) as Lancamento[]), ...((semCaixa.data || []) as Lancamento[])];
+
+      const [comCaixa, semCaixa] = await Promise.all([
+        fetchAll(supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita', 'transferencia'])
+          .not('data_caixa', 'is', null).gte('data_caixa', start).lte('data_caixa', end)),
+        fetchAll(supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita', 'transferencia'])
+          .is('data_caixa', null).gte('data_despesa', start).lte('data_despesa', end)),
+      ]);
+      rows = [...comCaixa, ...semCaixa];
     } else {
-      const [contasRes, lancRes] = await Promise.all([
-        supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome'),
-        supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
-          .in('tipo', ['despesa', 'receita', 'transferencia'])
-          .gte('data_despesa', start).lte('data_despesa', end).limit(12000),
-      ]);
+      const contasRes = await supabase.from('contas').select('id, nome, tipo').eq('grupo_id', grupoId).order('nome');
       if (contasRes.error) throw new Error(contasRes.error.message);
-      if (lancRes.error) throw new Error(lancRes.error.message);
       setContas((contasRes.data || []) as Conta[]);
-      rows = (lancRes.data || []) as Lancamento[];
+
+      rows = await fetchAll(supabase.from('transacoes').select(select).eq('grupo_id', grupoId)
+        .in('tipo', ['despesa', 'receita', 'transferencia'])
+        .gte('data_despesa', start).lte('data_despesa', end));
     }
     setLancamentos(rows);
   }, []);
