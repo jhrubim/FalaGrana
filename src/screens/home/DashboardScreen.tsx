@@ -721,7 +721,7 @@ export default function DashboardScreen() {
   }, [rangeMode, customIni, customFim, hoje]);
 
   const carregarTransacoesPeriodo = useCallback(
-    async (grupoId: string) => {
+    async (grupoId: string, ini: string, fim: string) => {
       // ✅ IGNORA TRANSFERÊNCIAS NO DASH: só receita/despesa
       let query = supabase
         .from('transacoes')
@@ -731,10 +731,10 @@ export default function DashboardScreen() {
         .eq('grupo_id', grupoId)
         .in('tipo', ['despesa', 'receita']);
 
-      if (range.ini && range.fim) {
+      if (ini && fim) {
         query = query
-          .gte('data_despesa', range.ini)
-          .lte('data_despesa', range.fim)
+          .gte('data_despesa', ini)
+          .lte('data_despesa', fim)
           .lte('data_despesa', hojeYmd);
       }
 
@@ -744,7 +744,7 @@ export default function DashboardScreen() {
 
       setTransacoesPeriodo((data || []) as Transacao[]);
     },
-    [range.ini, range.fim, hojeYmd]
+    [hojeYmd]
   );
 
   const carregarTela = useCallback(async () => {
@@ -756,17 +756,18 @@ export default function DashboardScreen() {
       const contaList = await carregarContas(grupo.grupo_id);
       await Promise.all([
         carregarSaldosPorConta(grupo.grupo_id, contaList),
-        carregarTransacoesPeriodo(grupo.grupo_id),
+        carregarTransacoesPeriodo(grupo.grupo_id, range.ini, range.fim),
       ]);
     } catch (e: any) {
       console.log('ERRO DASHBOARD carregarTela:', e);
       setErroTela(e?.message || 'Erro ao carregar dashboard.');
       setGrupoAtivo(null);
       setContas([]);
-      setSaldoPorConta({});
+      setSaldoPorContaConfirmado({});
+      setSaldoPorContaTotal({});
       setTransacoesPeriodo([]);
     }
-  }, [carregarGrupoAtivo, carregarContas, carregarSaldosPorConta, carregarTransacoesPeriodo]);
+  }, [carregarGrupoAtivo, carregarContas, carregarSaldosPorConta, carregarTransacoesPeriodo, range.ini, range.fim]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', () => carregarTela());
