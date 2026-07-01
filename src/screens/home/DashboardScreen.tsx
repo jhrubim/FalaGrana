@@ -722,27 +722,38 @@ export default function DashboardScreen() {
 
   const carregarTransacoesPeriodo = useCallback(
     async (grupoId: string, ini: string, fim: string) => {
-      // ✅ IGNORA TRANSFERÊNCIAS NO DASH: só receita/despesa
-      let query = supabase
-        .from('transacoes')
-        .select(
-          `id,grupo_id,conta_id,data_caixa,data_despesa,descricao,valor,grupo,subgrupo,status,tipo,transferencia_id,created_at`
-        )
-        .eq('grupo_id', grupoId)
-        .in('tipo', ['despesa', 'receita']);
+      // Pagina em blocos de 1000 para contornar limite do Supabase
+      const PAGE = 1000;
+      let allData: any[] = [];
+      let from = 0;
 
-      if (ini && fim) {
-        query = query
-          .gte('data_despesa', ini)
-          .lte('data_despesa', fim)
-          .lte('data_despesa', hojeYmd);
+      while (true) {
+        let query = supabase
+          .from('transacoes')
+          .select(
+            `id,grupo_id,conta_id,data_caixa,data_despesa,descricao,valor,grupo,subgrupo,status,tipo,transferencia_id,created_at`
+          )
+          .eq('grupo_id', grupoId)
+          .in('tipo', ['despesa', 'receita'])
+          .order('data_despesa', { ascending: true })
+          .range(from, from + PAGE - 1);
+
+        if (ini && fim) {
+          query = query
+            .gte('data_despesa', ini)
+            .lte('data_despesa', fim)
+            .lte('data_despesa', hojeYmd);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(`Não foi possível carregar dados do período. (${error.message})`);
+
+        allData = allData.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
       }
 
-      const { data, error } = await query.limit(20000);
-
-      if (error) throw new Error(`Não foi possível carregar dados do período. (${error.message})`);
-
-      setTransacoesPeriodo((data || []) as Transacao[]);
+      setTransacoesPeriodo(allData as Transacao[]);
     },
     [hojeYmd]
   );
