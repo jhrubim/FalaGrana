@@ -349,7 +349,7 @@ export default function LancamentosScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const appliedPrefillRef = useRef(false);
+  const appliedPrefillRef = useRef<Prefill | null>(null);
   const prefill: Prefill | null = route?.params?.prefill ?? null;
 
   const [loading, setLoading] = useState(true);
@@ -465,7 +465,10 @@ export default function LancamentosScreen() {
   // ── Prefill ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!prefill || appliedPrefillRef.current) return;
+    // Compara por referência: cada navigate() cria um novo objeto,
+    // então dois drills diferentes sempre terão referências distintas.
+    if (!prefill || prefill === appliedPrefillRef.current) return;
+    appliedPrefillRef.current = prefill;
     if (prefill.filtroTipo) setFiltroTipo(prefill.filtroTipo);
     if (prefill.filtroStatus) setFiltroStatus(prefill.filtroStatus);
     if (prefill.filtroContaId) setFiltroContaId(prefill.filtroContaId);
@@ -478,7 +481,6 @@ export default function LancamentosScreen() {
       if (prefill.dataFim) setCustomFim(prefill.dataFim);
     }
     if (prefill.basePeriodo) setBasePeriodo(prefill.basePeriodo);
-    appliedPrefillRef.current = true;
   }, [prefill]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
