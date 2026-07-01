@@ -218,6 +218,9 @@ function LancamentoRow({
   onDelete,
   isDeleting,
   isViewer,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: {
   item: Lancamento;
   conta: string;
@@ -225,6 +228,9 @@ function LancamentoRow({
   onDelete: () => void;
   isDeleting: boolean;
   isViewer: boolean;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const tipo = item.tipo || 'despesa';
   const vNum = Number(item.valor || 0);
@@ -238,12 +244,27 @@ function LancamentoRow({
 
   return (
     <Pressable
-      onPress={onPress}
-      disabled={isDeleting}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      onPress={selectionMode ? onToggleSelect : onPress}
+      disabled={isDeleting && !selectionMode}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && styles.rowPressed,
+        selectionMode && isSelected && { backgroundColor: 'rgba(74,222,128,0.08)' },
+      ]}
       accessibilityLabel={`${item.descricao || 'Lançamento'}, ${formatMoney(vNum)}`}
     >
-      <TipoIcon tipo={tipo} />
+      {selectionMode ? (
+        <View style={{
+          width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+          borderColor: isSelected ? fg.colors.accent : fg.colors.muted,
+          backgroundColor: isSelected ? fg.colors.accent : 'transparent',
+          alignItems: 'center', justifyContent: 'center', marginRight: 10,
+        }}>
+          {isSelected && <Text style={{ color: fg.colors.bg, fontSize: 12, fontWeight: '700' }}>✓</Text>}
+        </View>
+      ) : (
+        <TipoIcon tipo={tipo} />
+      )}
 
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
@@ -258,7 +279,7 @@ function LancamentoRow({
             {isPendente && (
               <View style={styles.pendenteDot} />
             )}
-            {!isViewer && (
+            {!isViewer && !selectionMode && (
               Platform.OS === 'web' ? (
                 // @ts-ignore
                 <button
@@ -348,6 +369,8 @@ export default function LancamentosScreen() {
 
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const isViewer = grupoAtivo?.papel === 'viewer';
 
@@ -605,6 +628,61 @@ export default function LancamentosScreen() {
     }
   };
 
+  const toggleSelecionar = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selecionarTodos = () => {
+    setSelectedIds(new Set(lancamentosFiltrados.map((l) => l.id)));
+  };
+
+  const cancelarSelecao = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const confirmarExclusaoEmLote = () => {
+    if (selectedIds.size === 0) return;
+    const qtd = selectedIds.size;
+    const msg = `Excluir ${qtd} lançamento${qtd !== 1 ? 's' : ''} selecionado${qtd !== 1 ? 's' : ''}? Esta ação não pode ser desfeita.`;
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) executarExclusaoEmLote();
+    } else {
+      Alert.alert('Excluir selecionados', msg, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir', style: 'destructive', onPress: executarExclusaoEmLote },
+      ]);
+    }
+  };
+
+  const executarExclusaoEmLote = async () => {
+    if (!grupoAtivo?.grupo_id || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    try {
+      setDeletingKey('lote');
+      const { error } = await supabase
+        .from('transacoes')
+        .delete()
+        .in('id', ids)
+        .eq('grupo_id', grupoAtivo.grupo_id);
+      if (error) throw error;
+      setLancamentos((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      DeviceEventEmitter.emit('FG_REFRESH_ALL');
+      cancelarSelecao();
+    } catch (e: any) {
+      const msg = e?.message || 'Não foi possível excluir.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Erro', msg);
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -629,11 +707,60 @@ export default function LancamentosScreen() {
             <Text style={styles.screenTitle}>Lançamentos</Text>
             <Text style={styles.screenSub}>{grupoAtivo?.nome_grupo || 'Minha Carteira'}</Text>
           </View>
-          <View style={styles.resumoMini}>
-            <Text style={[styles.resumoVal, { color: fg.colors.accent }]}>+{formatMoney(resumo.receita)}</Text>
-            <Text style={[styles.resumoVal, { color: fg.colors.danger }]}>−{formatMoney(resumo.despesa)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={styles.resumoMini}>
+              <Text style={[styles.resumoVal, { color: fg.colors.accent }]}>+{formatMoney(resumo.receita)}</Text>
+              <Text style={[styles.resumoVal, { color: fg.colors.danger }]}>−{formatMoney(resumo.despesa)}</Text>
+            </View>
+            {!isViewer && (
+              <Pressable
+                onPress={() => { setSelectionMode((s) => !s); setSelectedIds(new Set()); }}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: selectionMode ? fg.colors.accent : fg.colors.border,
+                  backgroundColor: selectionMode ? 'rgba(74,222,128,0.1)' : 'transparent',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+                accessibilityLabel="Modo de seleção"
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: selectionMode ? fg.colors.accent : fg.colors.muted }}>
+                  {selectionMode ? 'Cancelar' : 'Selecionar'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
+
+        {/* ── Barra de seleção ──────────────────────────────────── */}
+        {selectionMode && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            backgroundColor: fg.colors.surface, borderRadius: 10,
+            borderWidth: 1, borderColor: fg.colors.border,
+            paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10,
+          }}>
+            <Text style={{ flex: 1, color: fg.colors.text, fontSize: 13, fontWeight: '600' }}>
+              {selectedIds.size === 0 ? 'Toque para selecionar' : `${selectedIds.size} selecionado${selectedIds.size !== 1 ? 's' : ''}`}
+            </Text>
+            <Pressable onPress={selecionarTodos} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+              <Text style={{ color: fg.colors.accent, fontSize: 12, fontWeight: '600' }}>Todos</Text>
+            </Pressable>
+            <Pressable
+              onPress={confirmarExclusaoEmLote}
+              disabled={selectedIds.size === 0 || deletingKey === 'lote'}
+              style={({ pressed }) => ({
+                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8,
+                backgroundColor: selectedIds.size > 0 ? fg.colors.danger : fg.colors.border,
+                opacity: (pressed || selectedIds.size === 0) ? 0.6 : 1,
+              })}
+            >
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                {deletingKey === 'lote' ? '…' : 'Excluir'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* ── Busca ─────────────────────────────────────────────── */}
         <View style={styles.searchBar}>
@@ -797,6 +924,9 @@ export default function LancamentosScreen() {
                     onDelete={() => { if (!deletingKey) confirmarExclusao(item); }}
                     isDeleting={deletingKey === key}
                     isViewer={isViewer}
+                    selectionMode={selectionMode}
+                    isSelected={selectedIds.has(item.id)}
+                    onToggleSelect={() => toggleSelecionar(item.id)}
                   />
                   {idx < lancamentosFiltrados.length - 1 && <View style={styles.divider} />}
                 </View>
@@ -820,6 +950,9 @@ export default function LancamentosScreen() {
                         onDelete={() => { if (!deletingKey) confirmarExclusao(item); }}
                         isDeleting={deletingKey === key}
                         isViewer={isViewer}
+                        selectionMode={selectionMode}
+                        isSelected={selectedIds.has(item.id)}
+                        onToggleSelect={() => toggleSelecionar(item.id)}
                       />
                       {idx < grupo.items.length - 1 && <View style={styles.divider} />}
                     </View>
