@@ -552,6 +552,7 @@ export default function DashboardScreen() {
   const [transacoesPeriodo, setTransacoesPeriodo] = useState<Transacao[]>([]);
 
   const [grupoDetalhe, setGrupoDetalhe] = useState<string | null>(null);
+  const [includePendentes, setIncludePendentes] = useState(true);
 
   const hoje = useMemo(() => new Date(), []);
   const hojeYmd = useMemo(() => ymd(new Date()), []);
@@ -700,45 +701,29 @@ export default function DashboardScreen() {
       return { ini: '', fim: '', label: `Personalizado` };
     }
 
-    // total: para o dashboard, vamos mostrar visão “amigável” dos últimos 12 meses
-    const ini = new Date(end.getFullYear(), end.getMonth() - 11, 1);
-    const fim = endOfMonth(end);
-    return { ini: ymd(ini), fim: ymd(fim), label: 'Últimos 12 meses' };
+    // total: sem filtro de data
+    return { ini: '', fim: '', label: 'Todo o período' };
   }, [rangeMode, customIni, customFim, hoje]);
 
   const carregarTransacoesPeriodo = useCallback(
     async (grupoId: string) => {
-      if (!range.ini || !range.fim) {
-        setTransacoesPeriodo([]);
-        return;
-      }
-
       // ✅ IGNORA TRANSFERÊNCIAS NO DASH: só receita/despesa
-      const { data, error } = await supabase
+      let query = supabase
         .from('transacoes')
         .select(
-          `
-          id,
-          grupo_id,
-          conta_id,
-          data_caixa,
-          data_despesa,
-          descricao,
-          valor,
-          grupo,
-          subgrupo,
-          status,
-          tipo,
-          transferencia_id,
-          created_at
-        `
+          `id,grupo_id,conta_id,data_caixa,data_despesa,descricao,valor,grupo,subgrupo,status,tipo,transferencia_id,created_at`
         )
         .eq('grupo_id', grupoId)
-        .in('tipo', ['despesa', 'receita'])
-        .gte('data_despesa', range.ini)
-        .lte('data_despesa', range.fim)
-        .lte('data_despesa', hojeYmd)
-        .limit(20000);
+        .in('tipo', ['despesa', 'receita']);
+
+      if (range.ini && range.fim) {
+        query = query
+          .gte('data_despesa', range.ini)
+          .lte('data_despesa', range.fim)
+          .lte('data_despesa', hojeYmd);
+      }
+
+      const { data, error } = await query.limit(20000);
 
       if (error) throw new Error(`Não foi possível carregar dados do período. (${error.message})`);
 
@@ -868,13 +853,20 @@ export default function DashboardScreen() {
     [transacoesPeriodo]
   );
 
+  const transacoesBase = useMemo(
+    () => includePendentes
+      ? transacoesPeriodo
+      : transacoesPeriodo.filter((t) => t.status !== 'pendente'),
+    [transacoesPeriodo, includePendentes]
+  );
+
   // ✅ KPIs do período (sem transferências)
   const agregados = useMemo(() => {
     let receitas = 0;
     let despesas = 0;
     let maiorDesp = { v: 0, desc: '-', g: '-', s: '-', dt: '-' };
 
-    for (const t of transacoesPeriodo) {
+    for (const t of transacoesBase) {
       const tipo = String(t.tipo || '').toLowerCase();
       const v = Math.abs(Number(t.valor || 0));
       if (tipo === 'receita') receitas += v;
@@ -901,7 +893,7 @@ export default function DashboardScreen() {
     const mediaDia = despesas / dias;
 
     return { receitas, despesas, resultado, mediaDia, maiorDesp, dias };
-  }, [transacoesPeriodo, range.ini, range.fim]);
+  }, [transacoesBase, range.ini, range.fim]);
 
   // ✅ Série “gastos ao longo do período” (diário/semana/mês)
   const serieGastos = useMemo(() => {
@@ -916,7 +908,7 @@ export default function DashboardScreen() {
 
     if (mode === 'daily') {
       const m = new Map<string, number>();
-      for (const t of transacoesPeriodo) {
+      for (const t of transacoesBase) {
         if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
         const d = (t.data_despesa || '').slice(0, 10);
         if (!d) continue;
@@ -937,7 +929,7 @@ export default function DashboardScreen() {
       const bucketCount = Math.max(1, Math.ceil(dias / 7));
       const sums = Array(bucketCount).fill(0);
 
-      for (const t of transacoesPeriodo) {
+      for (const t of transacoesBase) {
         if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
         const d = parseYmd((t.data_despesa || '').slice(0, 10));
         if (!d) continue;
@@ -953,7 +945,7 @@ export default function DashboardScreen() {
 
     // monthly
     const m = new Map<string, number>();
-    for (const t of transacoesPeriodo) {
+    for (const t of transacoesBase) {
       if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
       const d = (t.data_despesa || '').slice(0, 10);
       if (!d) continue;
@@ -971,12 +963,12 @@ export default function DashboardScreen() {
 
     const pts = months.map((k) => ({ label: ymLabel(k), value: Number(m.get(k) || 0) }));
     return { points: pts, subtitle: 'Mensal (gastos)' };
-  }, [transacoesPeriodo, range.ini, range.fim]);
+  }, [transacoesBase, range.ini, range.fim]);
 
   // ✅ Gastos por categoria (grupo) + subgrupo detalhe
   const despesasPorGrupo = useMemo(() => {
     const m = new Map<string, number>();
-    for (const t of transacoesPeriodo) {
+    for (const t of transacoesBase) {
       if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
       const g = (t.grupo || 'Sem grupo').trim() || 'Sem grupo';
       const v = Math.abs(Number(t.valor || 0));
@@ -992,7 +984,7 @@ export default function DashboardScreen() {
     if (rest > 0) top.push({ key: '__outros__', label: 'Outros', value: rest });
 
     return top;
-  }, [transacoesPeriodo]);
+  }, [transacoesBase]);
 
   const totalDespesas = useMemo(() => agregados.despesas, [agregados.despesas]);
 
@@ -1000,7 +992,7 @@ export default function DashboardScreen() {
     if (!grupoDetalhe) return [];
     const m = new Map<string, number>();
 
-    for (const t of transacoesPeriodo) {
+    for (const t of transacoesBase) {
       if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
       const g = (t.grupo || 'Sem grupo').trim() || 'Sem grupo';
       if (g !== grupoDetalhe) continue;
@@ -1015,7 +1007,7 @@ export default function DashboardScreen() {
       .sort((a, b) => b.value - a.value);
 
     return arr.slice(0, 12);
-  }, [transacoesPeriodo, grupoDetalhe]);
+  }, [transacoesBase, grupoDetalhe]);
 
   const maiorCategoria = useMemo(() => {
     const top = despesasPorGrupo[0];
@@ -1025,7 +1017,7 @@ export default function DashboardScreen() {
   }, [despesasPorGrupo, totalDespesas]);
 
   const ultimasDespesas = useMemo(() => {
-    const list = transacoesPeriodo
+    const list = transacoesBase
       .filter((t) => String(t.tipo || '').toLowerCase() === 'despesa')
       .sort((a, b) => {
         const d1 = Date.parse((a.data_despesa || a.created_at || '') as string);
@@ -1042,7 +1034,7 @@ export default function DashboardScreen() {
       const v = Math.abs(Number(t.valor || 0));
       return { id: t.id, conta, dt, g, s, desc: t.descricao || '(Sem descrição)', v };
     });
-  }, [transacoesPeriodo, mapaContas]);
+  }, [transacoesBase, mapaContas]);
 
   // ✅ Drill-through para Lançamentos
   const drillLancamentos = (grupo: string, subgrupo: string) => {
@@ -1110,6 +1102,36 @@ export default function DashboardScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Toggle pendentes */}
+      <Pressable
+        onPress={() => setIncludePendentes((v) => !v)}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 8,
+          alignSelf: 'flex-end', marginTop: 8,
+          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+          borderWidth: 1,
+          borderColor: includePendentes ? c.warn + '88' : c.border,
+          backgroundColor: includePendentes ? c.warnSoft : 'transparent',
+          opacity: pressed ? 0.75 : 1,
+        })}
+        accessibilityLabel={includePendentes ? 'Ocultar pendentes dos totais' : 'Incluir pendentes nos totais'}
+      >
+        <View style={{
+          width: 28, height: 16, borderRadius: 8,
+          backgroundColor: includePendentes ? c.warn : c.border,
+          justifyContent: 'center',
+          paddingHorizontal: 2,
+        }}>
+          <View style={{
+            width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff',
+            alignSelf: includePendentes ? 'flex-end' : 'flex-start',
+          }} />
+        </View>
+        <Text style={{ fontSize: 11, fontWeight: '600', color: includePendentes ? c.warn : c.muted }}>
+          {includePendentes ? 'Com pendentes' : 'Sem pendentes'}
+        </Text>
+      </Pressable>
 
       <View style={{ height: 12 }} />
 
@@ -1254,7 +1276,7 @@ export default function DashboardScreen() {
           <Chip label="30 dias" active={rangeMode === '30d'} onPress={() => setRangeMode('30d')} />
           <Chip label="90 dias" active={rangeMode === '90d'} onPress={() => setRangeMode('90d')} />
           <Chip label="Este ano" active={rangeMode === 'ano'} onPress={() => setRangeMode('ano')} />
-          <Chip label="Total" active={rangeMode === 'total'} onPress={() => setRangeMode('total')} />
+          <Chip label="Todo período" active={rangeMode === 'total'} onPress={() => setRangeMode('total')} />
           <Chip label="Personalizado" active={rangeMode === 'custom'} onPress={() => setRangeMode('custom')} />
         </View>
 
