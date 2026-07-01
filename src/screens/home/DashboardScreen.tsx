@@ -1022,16 +1022,22 @@ export default function DashboardScreen() {
 
   // ✅ Gastos por categoria (grupo) + subgrupo detalhe
   const despesasPorGrupo = useMemo(() => {
-    const m = new Map<string, number>();
+    // Acumula despesas e receitas separadamente por grupo
+    const mDesp = new Map<string, number>();
+    const mRec  = new Map<string, number>();
     for (const t of transacoesBase) {
-      if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
+      const tipo = String(t.tipo || '').toLowerCase();
       const g = (t.grupo || 'Sem grupo').trim() || 'Sem grupo';
       const v = Math.abs(Number(t.valor || 0));
-      m.set(g, (m.get(g) || 0) + v);
+      if (tipo === 'despesa') mDesp.set(g, (mDesp.get(g) || 0) + v);
+      else if (tipo === 'receita') mRec.set(g, (mRec.get(g) || 0) + v);
     }
 
-    const arr = Array.from(m.entries())
-      .map(([key, value]) => ({ key, label: key, value }))
+    // Valor líquido = despesa − receita; exibe apenas grupos com saldo positivo
+    const grupos = new Set([...mDesp.keys(), ...mRec.keys()]);
+    const arr = Array.from(grupos)
+      .map((g) => ({ key: g, label: g, value: (mDesp.get(g) || 0) - (mRec.get(g) || 0) }))
+      .filter((x) => x.value > 0)
       .sort((a, b) => b.value - a.value);
 
     const top = arr.slice(0, 10);
@@ -1041,27 +1047,33 @@ export default function DashboardScreen() {
     return top;
   }, [transacoesBase]);
 
-  const totalDespesas = useMemo(() => agregados.despesas, [agregados.despesas]);
+  // Total líquido de saída = soma dos valores positivos por grupo
+  const totalDespesas = useMemo(
+    () => despesasPorGrupo.reduce((s, x) => s + x.value, 0),
+    [despesasPorGrupo]
+  );
 
   const despesasPorSubgrupo = useMemo(() => {
     if (!grupoDetalhe) return [];
-    const m = new Map<string, number>();
+    const mDesp = new Map<string, number>();
+    const mRec  = new Map<string, number>();
 
     for (const t of transacoesBase) {
-      if (String(t.tipo || '').toLowerCase() !== 'despesa') continue;
+      const tipo = String(t.tipo || '').toLowerCase();
       const g = (t.grupo || 'Sem grupo').trim() || 'Sem grupo';
       if (g !== grupoDetalhe) continue;
-
       const s = (t.subgrupo || t.descricao || 'Sem subgrupo').trim() || 'Sem subgrupo';
       const v = Math.abs(Number(t.valor || 0));
-      m.set(s, (m.get(s) || 0) + v);
+      if (tipo === 'despesa') mDesp.set(s, (mDesp.get(s) || 0) + v);
+      else if (tipo === 'receita') mRec.set(s, (mRec.get(s) || 0) + v);
     }
 
-    const arr = Array.from(m.entries())
-      .map(([key, value]) => ({ key, label: key, value }))
-      .sort((a, b) => b.value - a.value);
-
-    return arr.slice(0, 12);
+    const subs = new Set([...mDesp.keys(), ...mRec.keys()]);
+    return Array.from(subs)
+      .map((s) => ({ key: s, label: s, value: (mDesp.get(s) || 0) - (mRec.get(s) || 0) }))
+      .filter((x) => x.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
   }, [transacoesBase, grupoDetalhe]);
 
   const maiorCategoria = useMemo(() => {
@@ -1407,7 +1419,7 @@ export default function DashboardScreen() {
     <>
       {/* Gastos por categoria */}
       <CategoryBars
-        title="Gastos por categoria"
+        title="Gasto líquido por categoria"
         subtitle="Toque no grupo para abrir lançamentos filtrados"
         items={despesasPorGrupo}
         total={totalDespesas}
