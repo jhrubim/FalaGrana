@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
@@ -8,6 +9,22 @@ const LOCKOUT_MS = 10 * 60 * 1000; // 10 minutos
 
 type LockState = { count: number; lockedUntil: number | null };
 
+// No browser, AsyncStorage não persiste entre recarregamentos — usa localStorage diretamente
+const storage = {
+  getItem: (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') return Promise.resolve(localStorage.getItem(key));
+    return AsyncStorage.getItem(key);
+  },
+  setItem: (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.setItem(key, value); return Promise.resolve(); }
+    return AsyncStorage.setItem(key, value);
+  },
+  removeItem: (key: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.removeItem(key); return Promise.resolve(); }
+    return AsyncStorage.removeItem(key);
+  },
+};
+
 export function useLoginLockout() {
   const [state, setState] = useState<LockState>({ count: 0, lockedUntil: null });
   const [now, setNow] = useState(Date.now());
@@ -15,14 +32,14 @@ export function useLoginLockout() {
 
   // Carrega estado persistido ao montar
   useEffect(() => {
-    AsyncStorage.getItem(LOCKOUT_KEY).then((raw) => {
+    storage.getItem(LOCKOUT_KEY).then((raw) => {
       if (!raw) return;
       const parsed: LockState = JSON.parse(raw);
       // Se o bloqueio já expirou, limpa automaticamente
       if (parsed.lockedUntil && Date.now() >= parsed.lockedUntil) {
         const cleared: LockState = { count: 0, lockedUntil: null };
         setState(cleared);
-        AsyncStorage.setItem(LOCKOUT_KEY, JSON.stringify(cleared));
+        storage.setItem(LOCKOUT_KEY, JSON.stringify(cleared));
       } else {
         setState(parsed);
       }
@@ -52,7 +69,7 @@ export function useLoginLockout() {
     if (state.lockedUntil && now >= state.lockedUntil) {
       const cleared: LockState = { count: 0, lockedUntil: null };
       setState(cleared);
-      AsyncStorage.setItem(LOCKOUT_KEY, JSON.stringify(cleared));
+      storage.setItem(LOCKOUT_KEY, JSON.stringify(cleared));
     }
   }, [now, state.lockedUntil]);
 
@@ -80,14 +97,14 @@ export function useLoginLockout() {
 
       const newState: LockState = { count: newCount, lockedUntil: newLockedUntil };
       setState(newState);
-      await AsyncStorage.setItem(LOCKOUT_KEY, JSON.stringify(newState));
+      await storage.setItem(LOCKOUT_KEY, JSON.stringify(newState));
     },
     [state],
   );
 
   const onSuccess = useCallback(async () => {
     setState({ count: 0, lockedUntil: null });
-    await AsyncStorage.removeItem(LOCKOUT_KEY);
+    await storage.removeItem(LOCKOUT_KEY);
   }, []);
 
   return { isLocked, countdown, attemptsLeft, onFailedAttempt, onSuccess };
