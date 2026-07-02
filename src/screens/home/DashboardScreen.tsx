@@ -1107,7 +1107,7 @@ export default function DashboardScreen() {
   const drillLancamentos = (grupo: string, subgrupo: string) => {
     navigation.navigate('Lancamentos', {
       prefill: {
-        filtroTipo: 'despesa',
+        filtroTipo: 'todos',
         dataInicio: rangeMode === 'total' ? '' : range.ini,
         dataFim: rangeMode === 'total' ? '' : range.fim,
         filtroGrupo: grupo || '',
