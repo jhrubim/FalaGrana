@@ -8,7 +8,7 @@ import AppStack from './AppStack';
 
 const LAST_ACTIVE_KEY = '@falagrana:last_active';
 // Exige novo login após 7 dias sem abrir o app
-const SESSION_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_TIMEOUT_MS = 3 * 24 * 60 * 60 * 1000;
 
 export default function RootNavigator() {
   const [session, setSession] = useState<Session | null>(null);
