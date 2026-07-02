@@ -631,7 +631,7 @@ export default function LancamentoManualScreen() {
     const t = tipo === 'despesa' ? 'despesa' : 'receita';
     const hasTipo = categorias.some((c) => !!c.tipo);
     if (!hasTipo) return categorias;
-    return categorias.filter((c) => (c.tipo || '').toLowerCase() === t);
+    return categorias.filter((c) => !c.tipo || (c.tipo || '').toLowerCase() === t);
   }, [categorias, tipo]);
 
   const contasOpts = useMemo<SelectOpt[]>(
