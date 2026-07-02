@@ -1443,34 +1443,36 @@ export default function DashboardScreen() {
             <View style={{ height: 10 }} />
             {despesasPorSubgrupo.length === 0 ? (
               <Text style={{ color: c.muted, fontWeight: '400' }}>Sem dados.</Text>
-            ) : (
-              despesasPorSubgrupo.map((it) => {
-                const pct = totalDespesas > 0 ? Math.round((it.value / totalDespesas) * 100) : 0;
-                return (
-                  <Pressable
-                    key={it.key}
-                    onPress={() => drillLancamentos(grupoDetalhe, it.key)}
-                    style={({ pressed }) => ({
-                      borderWidth: 1,
-                      borderColor: c.border,
-                      borderRadius: 12,
-                      padding: 10,
-                      marginBottom: 8,
-                      backgroundColor: c.surface,
-                      opacity: pressed ? 0.9 : 1,
-                    })}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-                      <Text style={{ color: c.text, fontWeight: '600', flex: 1 }} numberOfLines={1}>{it.label}</Text>
-                      <Text style={{ color: c.danger, fontWeight: '600', fontSize: 13 }}>{formatMoney(it.value)}</Text>
-                    </View>
-                    <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }}>
-                      {pct}% dos gastos do período
-                    </Text>
-                  </Pressable>
-                );
-              })
-            )}
+            ) : (() => {
+                const totalGrupo = despesasPorSubgrupo.reduce((acc, it) => acc + it.value, 0);
+                return despesasPorSubgrupo.map((it) => {
+                  const pct = totalGrupo > 0 ? Math.round((it.value / totalGrupo) * 100) : 0;
+                  return (
+                    <Pressable
+                      key={it.key}
+                      onPress={() => drillLancamentos(grupoDetalhe, it.key)}
+                      style={({ pressed }) => ({
+                        borderWidth: 1,
+                        borderColor: c.border,
+                        borderRadius: 12,
+                        padding: 10,
+                        marginBottom: 8,
+                        backgroundColor: c.surface,
+                        opacity: pressed ? 0.9 : 1,
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+                        <Text style={{ color: c.text, fontWeight: '600', flex: 1 }} numberOfLines={1}>{it.label}</Text>
+                        <Text style={{ color: c.danger, fontWeight: '600', fontSize: 13 }}>{formatMoney(it.value)}</Text>
+                      </View>
+                      <Text style={{ color: c.muted, fontWeight: '400', fontSize: 11, marginTop: 2 }}>
+                        {pct}% de {grupoDetalhe}
+                      </Text>
+                    </Pressable>
+                  );
+                });
+              })()
+            }
             <View style={{ height: 8 }} />
             <Button title="Fechar" variant="ghost" onPress={() => setGrupoDetalhe(null)} />
           </Card>
