@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { useLoginLockout } from '../../hooks/useLoginLockout';
 
 function validarEmail(email: string): boolean {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,17 +28,18 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [erroTela, setErroTela] = useState<string | null>(null);
 
+  const { isLocked, countdown, attemptsLeft, onFailedAttempt, onSuccess } = useLoginLockout();
+
   const emailTratado = useMemo(() => email.trim().toLowerCase(), [email]);
   const senhaTratada = useMemo(() => senha.trim(), [senha]);
-
   const emailValido = useMemo(() => validarEmail(emailTratado), [emailTratado]);
 
   const podeEntrar = useMemo(() => {
-    return !loading && emailValido && senhaTratada.length >= 6;
-  }, [loading, emailValido, senhaTratada.length]);
+    return !loading && !isLocked && emailValido && senhaTratada.length >= 6;
+  }, [loading, isLocked, emailValido, senhaTratada.length]);
 
   const handleLogin = async () => {
-    if (loading) return;
+    if (loading || isLocked) return;
 
     setErroTela(null);
 
@@ -60,13 +62,22 @@ export default function LoginScreen() {
       });
 
       if (error) {
+        await onFailedAttempt(emailTratado);
         await sleep(600);
 
-        // Segurança: mensagem genérica (não revela se o e-mail existe)
-        setErroTela('E-mail ou senha inválidos.');
+        const restantes = attemptsLeft - 1;
+        if (restantes > 0) {
+          setErroTela(
+            restantes === 1
+              ? 'E-mail ou senha inválidos. Última tentativa antes do bloqueio.'
+              : `E-mail ou senha inválidos. ${restantes} tentativas restantes.`,
+          );
+        }
+        // Se restantes <= 0, o lockout UI já cobre o feedback
         return;
       }
 
+      await onSuccess();
       // sucesso: RootNavigator troca automaticamente para AppStack
     } catch {
       await sleep(400);
@@ -90,7 +101,19 @@ export default function LoginScreen() {
           <Text style={styles.title}>FalaGrana</Text>
           <Text style={styles.subtitle}>Entre para acessar seu dashboard</Text>
 
-          {erroTela ? (
+          {/* Bloqueio por tentativas excessivas */}
+          {isLocked && (
+            <View style={styles.lockBox}>
+              <Text style={styles.lockTitle}>⛔ Acesso temporariamente bloqueado</Text>
+              <Text style={styles.lockText}>
+                Muitas tentativas incorretas. Tente novamente em{' '}
+                <Text style={styles.lockCountdown}>{countdown}</Text>
+              </Text>
+            </View>
+          )}
+
+          {/* Erro genérico */}
+          {!isLocked && erroTela ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorBoxText}>{erroTela}</Text>
             </View>
@@ -112,7 +135,7 @@ export default function LoginScreen() {
                 setEmail(v);
                 if (erroTela) setErroTela(null);
               }}
-              editable={!loading}
+              editable={!loading && !isLocked}
               returnKeyType="next"
             />
             {email.length > 0 && !emailValido ? (
@@ -139,14 +162,14 @@ export default function LoginScreen() {
                   setSenha(v);
                   if (erroTela) setErroTela(null);
                 }}
-                editable={!loading}
+                editable={!loading && !isLocked}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
 
               <Pressable
                 onPress={() => setMostrarSenha((prev) => !prev)}
-                disabled={loading}
+                disabled={loading || isLocked}
                 style={({ pressed }) => [
                   styles.showButton,
                   pressed && !loading ? styles.showButtonPressed : null,
@@ -242,6 +265,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#7d8590',
     fontSize: 13,
+  },
+  lockBox: {
+    backgroundColor: 'rgba(246,196,83,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(246,196,83,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  lockTitle: {
+    color: '#f6c453',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  lockText: {
+    color: '#f6c453',
+    fontSize: 12,
+    opacity: 0.85,
+  },
+  lockCountdown: {
+    fontWeight: '700',
   },
   errorBox: {
     backgroundColor: 'rgba(248,113,113,0.1)',
