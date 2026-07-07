@@ -508,6 +508,8 @@ export default function PreviewImportacaoScreen() {
       try {
         const grupoId = String((p as any).grupoId || '');
         const contaId = String((p as any).contaId || '');
+        const isCartao = String((p as any).contaTipo || '').toLowerCase() === 'cartao';
+        const hojeYmd = todayISO();
 
         if (!grupoId || !contaId) {
           safeSetState(() => setSaldoAtualRef(null));
@@ -524,16 +526,29 @@ export default function PreviewImportacaoScreen() {
 
           const { data, error } = await supabase
             .from('transacoes')
-            .select('conta_id, tipo, valor')
+            .select('conta_id, tipo, valor, data_caixa, data_despesa')
             .eq('grupo_id', grupoId)
             .eq('status', 'confirmada')
             .range(from, to);
 
           if (error) throw error;
 
-          const rows = (data || []) as Array<{ conta_id: string | null; tipo: string | null; valor: any }>;
+          const rows = (data || []) as Array<{
+            conta_id: string | null;
+            tipo: string | null;
+            valor: any;
+            data_caixa: string | null;
+            data_despesa: string | null;
+          }>;
+
           for (const r of rows) {
             if (r.conta_id !== contaId) continue;
+
+            // Aplica o mesmo corte de data do dashboard: exclui transações futuras
+            const dataRef = isCartao
+              ? (r.data_despesa || r.data_caixa || '').slice(0, 10)
+              : (r.data_caixa || r.data_despesa || '').slice(0, 10);
+            if (!dataRef || dataRef > hojeYmd) continue;
 
             const tipo = String(r.tipo || '').toLowerCase().trim();
             const vRaw = Number.isFinite(Number(r.valor)) ? Number(r.valor) : 0;
