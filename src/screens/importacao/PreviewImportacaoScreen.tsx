@@ -520,12 +520,14 @@ export default function PreviewImportacaoScreen() {
         const { data: contaData } = await supabase
           .from('contas')
           .select('saldo_inicial')
+          .eq('grupo_id', grupoId)
           .eq('id', contaId)
           .single();
         const saldoInicial = Number((contaData as any)?.saldo_inicial || 0);
+        console.log('[saldoAtual] contaId:', contaId, 'saldo_inicial:', saldoInicial, 'contaData:', contaData);
 
         let page = 0;
-        const pageSize = 2000;
+        const pageSize = 1000;
         let saldo = saldoInicial;
 
         while (true) {
@@ -567,6 +569,7 @@ export default function PreviewImportacaoScreen() {
             else if (tipo === 'transferencia') saldo += vRaw;
           }
 
+          console.log('[saldoAtual] page', page, '— rows total:', rows.length, '— desta conta:', rows.filter(r => r.conta_id === contaId).length, '— saldo parcial:', saldo);
           if (rows.length < pageSize) break;
           page += 1;
           if (page > 50) break;

@@ -783,9 +783,12 @@ export default function DashboardScreen() {
   }, [grupoAtivo?.grupo_id, range.ini, range.fim, carregarTransacoesPeriodo]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', () => carregarTela());
+    const sub = DeviceEventEmitter.addListener('FG_REFRESH_ALL', () => {
+      carregarTela();
+      if (grupoAtivo?.grupo_id) carregarTransacoesPeriodo(grupoAtivo.grupo_id, range.ini, range.fim);
+    });
     return () => sub.remove();
-  }, [carregarTela]);
+  }, [carregarTela, carregarTransacoesPeriodo, grupoAtivo?.grupo_id, range.ini, range.fim]);
 
   useEffect(() => {
     let alive = true;

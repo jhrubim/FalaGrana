@@ -651,6 +651,17 @@ function categorizarPorHeuristica(descricao: string): SugestaoCategoria {
   return { grupo: 'Outros', subgrupo: 'Não categorizado', confianca: 'baixa', fonte: 'fallback' };
 }
 
+function extrairConteudoPix(normalizada: string): string | null {
+  // Remove prefixos comuns de PIX para expor o conteúdo útil (nome do recebedor, estabelecimento, etc.)
+  const semPrefixo = normalizada
+    .replace(/^pix\s+(enviado|recebido|credito|debito|cred|deb)\s*[-–:]\s*/i, '')
+    .replace(/^pix\s*(enviado|recebido|credito|debito|cred|deb)\s+/i, '')
+    .replace(/^pix\s*[-–:]\s*/i, '')
+    .replace(/^pix\s+/i, '')
+    .trim();
+  return semPrefixo.length > 0 && semPrefixo !== normalizada.trim() ? semPrefixo : null;
+}
+
 export function categorizarPorRegras(descricao: string): SugestaoCategoria {
   const normalizada = normalizarTexto(descricao);
 
@@ -877,12 +888,20 @@ export function categorizarPorRegras(descricao: string): SugestaoCategoria {
 
   for (const [padrao, categoria] of Object.entries(palavrasChave)) {
     if (new RegExp(padrao, 'i').test(normalizada)) {
-      return {
-        ...categoria,
-        confianca: 'media',
-        fonte: 'regra_generica',
-      };
+      return { ...categoria, confianca: 'media', fonte: 'regra_generica' };
     }
+  }
+
+  // Para PIX: tenta as keyword rules no conteúdo após o prefixo (ex: "PIX Enviado - Padaria X" → testa "padaria x")
+  const conteudoPix = extrairConteudoPix(normalizada);
+  if (conteudoPix) {
+    for (const [padrao, categoria] of Object.entries(palavrasChave)) {
+      if (new RegExp(padrao, 'i').test(conteudoPix)) {
+        return { ...categoria, confianca: 'media', fonte: 'regra_generica' };
+      }
+    }
+    // Conteúdo pós-PIX não bateu em nenhuma regra: deixa sem categoria para o usuário decidir
+    return { grupo: 'Outros', subgrupo: 'Não categorizado', confianca: 'baixa', fonte: 'fallback' };
   }
 
   return categorizarPorHeuristica(descricao);
