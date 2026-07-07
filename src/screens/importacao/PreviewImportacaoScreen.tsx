@@ -516,9 +516,17 @@ export default function PreviewImportacaoScreen() {
           return;
         }
 
+        // Seed com saldo_inicial da conta, igual ao dashboard
+        const { data: contaData } = await supabase
+          .from('contas')
+          .select('saldo_inicial')
+          .eq('id', contaId)
+          .single();
+        const saldoInicial = Number((contaData as any)?.saldo_inicial || 0);
+
         let page = 0;
         const pageSize = 2000;
-        let saldo = 0;
+        let saldo = saldoInicial;
 
         while (true) {
           const from = page * pageSize;
