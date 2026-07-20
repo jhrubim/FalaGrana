@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>FalaGrana</title>
+    <style>
+      /* Base */
+      *, *::before, *::after { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #0d1117;
+        height: 100%;
+        overflow: hidden; /* o scroll é gerenciado pelo RN */
+      }
+
+      #root {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: #0d1117;
+      }
+
+      /* Oculta scrollbar em todos os elementos — mantém funcionalidade */
+      * {
+        scrollbar-width: none;       /* Firefox */
+        -ms-overflow-style: none;    /* IE / Edge antigo */
+      }
+      *::-webkit-scrollbar {
+        display: none;               /* Chrome / Safari */
+      }
+
+      /* Remove outline padrão do browser em elementos focados via toque */
+      *:focus { outline: none; }
+
+      /* Remove highlight azul em tap mobile */
+      * { -webkit-tap-highlight-color: transparent; }
+
+      /* Fonte base */
+      body { font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -262,6 +262,8 @@ export default function PreviewImportacaoScreen() {
 
   const [saldoAtualRef, setSaldoAtualRef] = useState<number | null>(null);
   const [carregandoSaldo, setCarregandoSaldo] = useState(false);
+  const [existentesSet, setExistentesSet] = useState<Set<string> | null>(null);
+  const [dbFaturaImpact, setDbFaturaImpact] = useState<number | null>(null);
 
   // Saldo do extrato vem do payload (preenchido na tela de importação)
   const saldoExtratoRefStr = useMemo(
@@ -336,18 +338,22 @@ export default function PreviewImportacaoScreen() {
       grupo_id: string;
       conta_id: string;
       data_despesa: string;
-      data_caixa: string;
+      data_caixa?: string | null;
       tipo: string;
       valor: number;
       descricao_normalizada: string;
     }) => {
       const v = Number(r.valor || 0);
       const v2 = v.toFixed(2);
+      // data_caixa normalizado: null/vazio cai para data_despesa.
+      // Mantido no fingerprint para que parcelas com datas de fatura diferentes
+      // não sejam bloqueadas como duplicatas (cada parcela tem data_caixa distinta).
+      const dc = String(r.data_caixa || r.data_despesa || '');
       return [
         r.grupo_id,
         r.conta_id,
         r.data_despesa,
-        r.data_caixa,
+        dc,
         String(r.tipo || '').toLowerCase().trim(),
         v2,
         String(r.descricao_normalizada || '').trim(),
@@ -367,6 +373,61 @@ export default function PreviewImportacaoScreen() {
     }
     return out;
   }, []);
+
+  const fpLoose = useCallback(
+    (r: { grupo_id: string; conta_id: string; data_despesa: string; tipo: string; valor: number; descricao_normalizada: string }) => {
+      const v2 = Number(r.valor || 0).toFixed(2);
+      return [
+        r.grupo_id,
+        r.conta_id,
+        r.data_despesa,
+        String(r.tipo || '').toLowerCase().trim(),
+        v2,
+        String(r.descricao_normalizada || '').trim(),
+      ].join('|');
+    },
+    []
+  );
+
+  const carregarExistentesPreview = useCallback(
+    async (params: { grupoId: string; contaId: string; dataCaixa?: string; dataMin?: string; dataMax?: string }) => {
+      const { grupoId, contaId, dataCaixa, dataMin, dataMax } = params;
+      const pageSize = 1000;
+      let page = 0;
+      const set = new Set<string>();
+      let impact = 0;
+      while (true) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        let q = supabase
+          .from('transacoes')
+          .select('grupo_id, conta_id, data_despesa, tipo, valor, descricao_normalizada')
+          .eq('grupo_id', grupoId)
+          .eq('conta_id', contaId)
+          .eq('status', 'confirmada');
+        if (dataCaixa) {
+          q = q.eq('data_caixa', dataCaixa);
+        } else if (dataMin && dataMax) {
+          q = q.gte('data_despesa', dataMin).lte('data_despesa', dataMax);
+        }
+        const { data, error } = await q.range(from, to);
+        if (error) throw error;
+        const rows = (data || []) as any[];
+        for (const r of rows) {
+          const v = Math.abs(Number(r.valor || 0));
+          const tipo = String(r.tipo || '').toLowerCase().trim();
+          if (tipo === 'receita') impact += v;
+          else if (tipo === 'despesa') impact -= v;
+          set.add(fpLoose({ grupo_id: r.grupo_id, conta_id: r.conta_id, data_despesa: r.data_despesa, tipo: r.tipo, valor: Number(r.valor || 0), descricao_normalizada: r.descricao_normalizada || '' }));
+        }
+        if (rows.length < pageSize) break;
+        page += 1;
+        if (page > 50) break;
+      }
+      return { set, impact };
+    },
+    [fpLoose]
+  );
 
   const carregarExistentesDedupe = useCallback(
     async (params: { grupoId: string; contaId: string; dataMin: string; dataMax: string }) => {
@@ -455,22 +516,39 @@ export default function PreviewImportacaoScreen() {
   );
 
   const indicadores = useMemo(() => {
+    const grupoId = String((payload as any)?.grupoId || '');
+    const contaId = String((payload as any)?.contaId || '');
+
     const total = linhas.length;
     const naoCategorizados = linhas.filter(isLinhaPendente).length;
 
-    // Impacto total de todos os lançamentos a importar
-    const impactoTotal = linhas.reduce((acc, l) => {
+    // Impacto total do CSV (todos os lançamentos)
+    const csvImpact = linhas.reduce((acc, l) => {
       const v = Math.abs(Number(l.valor) || 0);
       return acc + (l.tipo === 'receita' ? v : -v);
     }, 0);
 
-    const saldoProjetado = (saldoAtualRef ?? 0) + impactoTotal;
+    // Para cartão: saldo projetado = saldo atual + csv - já importado nesta fatura
+    // Evita double-counting de transações que já estão no saldo atual
+    const impactoNovo = contaEhCartao && dbFaturaImpact !== null
+      ? csvImpact - dbFaturaImpact
+      : csvImpact;
 
-    // Diferença: saldo informado no extrato menos saldo projetado
+    const saldoProjetado = (saldoAtualRef ?? 0) + impactoNovo;
     const diffExtrato = saldoExtratoRefStr.trim().length > 0 ? saldoExtratoRefNum - saldoProjetado : null;
 
-    return { total, naoCategorizados, impactoTotal, saldoProjetado, diffExtrato };
-  }, [linhas, isLinhaPendente, saldoAtualRef, saldoExtratoRefStr, saldoExtratoRefNum]);
+    return {
+      total,
+      naoCategorizados,
+      impactoTotal: impactoNovo,
+      csvImpact,
+      saldoProjetado,
+      diffExtrato,
+      duplicadas: 0,
+      temFaturaPrevia: contaEhCartao && dbFaturaImpact !== null && dbFaturaImpact !== 0,
+      dbFaturaImpact: dbFaturaImpact ?? 0,
+    };
+  }, [linhas, isLinhaPendente, saldoAtualRef, saldoExtratoRefStr, saldoExtratoRefNum, dbFaturaImpact, contaEhCartao, payload]);
 
   const linhasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -630,7 +708,35 @@ export default function PreviewImportacaoScreen() {
       const historico = (histData || []) as HistoricoCat[];
 
       safeSetState(() => setCategorias(categoriasLista));
-      safeSetState(() => setLinhas(montarLinhasPreview((p as any).transacoes, categoriasLista, historico, cartao)));
+      const novasLinhas = montarLinhasPreview((p as any).transacoes, categoriasLista, historico, cartao);
+      safeSetState(() => setLinhas(novasLinhas));
+
+      if ((p as any).grupoId && (p as any).contaId) {
+        try {
+          if (cartao) {
+            const faturaDate = setDay28(refISO);
+            const result = await carregarExistentesPreview({
+              grupoId: (p as any).grupoId,
+              contaId: (p as any).contaId,
+              dataCaixa: faturaDate,
+            });
+            safeSetState(() => setExistentesSet(result.set));
+            safeSetState(() => setDbFaturaImpact(result.impact));
+          } else {
+            const datasDedup = novasLinhas.map(l => l.data).filter(Boolean).sort();
+            const result = await carregarExistentesPreview({
+              grupoId: (p as any).grupoId,
+              contaId: (p as any).contaId,
+              dataMin: datasDedup[0],
+              dataMax: datasDedup[datasDedup.length - 1],
+            });
+            safeSetState(() => setExistentesSet(result.set));
+          }
+        } catch {
+          safeSetState(() => setExistentesSet(null));
+          safeSetState(() => setDbFaturaImpact(null));
+        }
+      }
 
       await carregarSaldoAtual(p);
     } catch (e: any) {
@@ -638,9 +744,11 @@ export default function PreviewImportacaoScreen() {
       safeSetState(() => setCategorias([]));
       safeSetState(() => setLinhas([]));
       safeSetState(() => setSaldoAtualRef(null));
+      safeSetState(() => setExistentesSet(null));
+      safeSetState(() => setDbFaturaImpact(null));
       safeSetState(() => setPayload(null));
     }
-  }, [carregarSaldoAtual, safeSetState]);
+  }, [carregarSaldoAtual, carregarExistentesDedupe, carregarExistentesPreview, safeSetState]);
 
   useEffect(() => {
     let ativo = true;
@@ -839,6 +947,24 @@ export default function PreviewImportacaoScreen() {
       dataMax,
     });
 
+    // Para cartão: carrega também fingerprint por data+tipo+valor (sem descrição)
+    // para capturar duplicatas quando o Itaú muda o formato da descrição entre exportações
+    let existentesDateValor: Set<string> | null = null;
+    if (contaEhCartaoLocal && dataCaixaFatura) {
+      const { data: dvData } = await supabase
+        .from('transacoes')
+        .select('conta_id, data_despesa, tipo, valor')
+        .eq('grupo_id', (payload as any).grupoId)
+        .eq('conta_id', (payload as any).contaId)
+        .eq('data_caixa', dataCaixaFatura)
+        .eq('status', 'confirmada');
+      existentesDateValor = new Set(
+        ((dvData || []) as any[]).map((r: any) =>
+          [r.conta_id, r.data_despesa, String(r.tipo || '').toLowerCase().trim(), Number(r.valor || 0).toFixed(2)].join('|')
+        )
+      );
+    }
+
     const antesFiltroBanco = registrosFinal.length;
     registrosFinal = registrosFinal.filter((r: any) => {
       const k = fpTx({
@@ -850,7 +976,12 @@ export default function PreviewImportacaoScreen() {
         valor: Number(r.valor || 0),
         descricao_normalizada: r.descricao_normalizada || '',
       });
-      return !existentes.has(k);
+      if (existentes.has(k)) return false;
+      if (existentesDateValor) {
+        const kDV = [r.conta_id, r.data_despesa, r.tipo.toLowerCase().trim(), Number(r.valor || 0).toFixed(2)].join('|');
+        if (existentesDateValor.has(kDV)) return false;
+      }
+      return true;
     });
     const removidosPorExistencia = antesFiltroBanco - registrosFinal.length;
 
@@ -1168,15 +1299,23 @@ export default function PreviewImportacaoScreen() {
             </Text>
           </View>
 
-          {/* Linha: impacto */}
+          {/* Linha: impacto CSV total */}
           <View style={styles.resumoRow}>
-            <Text style={styles.resumoLabel}>
-              {indicadores.impactoTotal >= 0 ? '+' : ''} Importação ({indicadores.total} lançamentos)
-            </Text>
-            <Text style={[styles.resumoValor, indicadores.impactoTotal >= 0 ? styles.pos : styles.neg]}>
-              {indicadores.impactoTotal >= 0 ? '+' : ''}{formatarMoeda(indicadores.impactoTotal)}
+            <Text style={styles.resumoLabel}>Extrato ({indicadores.total} lançamentos)</Text>
+            <Text style={[styles.resumoValor, indicadores.csvImpact >= 0 ? styles.pos : styles.neg]}>
+              {indicadores.csvImpact >= 0 ? '+' : ''}{formatarMoeda(indicadores.csvImpact)}
             </Text>
           </View>
+
+          {/* Linha: já importados nesta fatura (só cartão) */}
+          {indicadores.temFaturaPrevia ? (
+            <View style={styles.resumoRow}>
+              <Text style={[styles.resumoLabel, { fontSize: 12 }]}>Já nesta fatura (ignorados)</Text>
+              <Text style={[styles.resumoValor, { color: fg.colors.muted, fontSize: 12 }]}>
+                {indicadores.dbFaturaImpact >= 0 ? '+' : ''}{formatarMoeda(indicadores.dbFaturaImpact)}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Separador */}
           <View style={styles.resumoDivider} />
